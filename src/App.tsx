@@ -4,24 +4,27 @@ import { LeftPanel } from './ui/LeftPanel';
 import { MainCanvas } from './ui/MainCanvas';
 import { RightPanel } from './ui/RightPanel';
 import { BottomTimeline } from './ui/BottomTimeline';
+import { useArchitectureStore } from './state/useArchitectureStore';
 
 export const App: React.FC = () => {
-  // Simulation playback state
+  const {
+    currentSpec,
+    activeTemplateKey,
+    loadTemplate,
+    selectElement,
+    addFault,
+    setWorkloadPattern,
+  } = useArchitectureStore();
+
+  // Playback & Presenter state
   const [isRunning, setIsRunning] = useState(false);
   const [speed, setSpeed] = useState<number>(1);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [selectedTemplate, setSelectedTemplate] = useState('shopfast');
   const [selectedScenario, setSelectedScenario] = useState('baseline');
   const [resilienceScore, setResilienceScore] = useState<number>(38);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
 
-  // Selection & Linter state
-  const [selectedElement, setSelectedElement] = useState<{
-    type: 'service' | 'edge';
-    id: string;
-    name?: string;
-  } | null>(null);
-
+  // Linter & Root Cause state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [findings, setFindings] = useState<any[]>([
     {
@@ -115,14 +118,6 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isRunning, speed]);
 
-  const handleSelectNode = (nodeId: string) => {
-    setSelectedElement({
-      type: 'service',
-      id: nodeId,
-      name: nodeId.toUpperCase(),
-    });
-  };
-
   const handleRunLinter = () => {
     setIsAnalyzing(true);
     setTimeout(() => {
@@ -133,6 +128,12 @@ export const App: React.FC = () => {
   const handleApplyFix = (findingId: string) => {
     setFindings((prev) => prev.filter((f) => f.id !== findingId));
     setResilienceScore((prev) => Math.min(100, prev + 12));
+  };
+
+  const handleAutoHarden = () => {
+    loadTemplate('shopfast_hardened');
+    setResilienceScore(84);
+    setFindings([]);
   };
 
   return (
@@ -148,17 +149,14 @@ export const App: React.FC = () => {
         }}
         speed={speed}
         onChangeSpeed={setSpeed}
-        selectedTemplate={selectedTemplate}
-        onSelectTemplate={setSelectedTemplate}
+        selectedTemplate={activeTemplateKey}
+        onSelectTemplate={(tpl) => loadTemplate(tpl)}
         selectedScenario={selectedScenario}
         onSelectScenario={setSelectedScenario}
         resilienceScore={resilienceScore}
-        onAutoHarden={() => {
-          setResilienceScore(84);
-          setFindings([]);
-        }}
+        onAutoHarden={handleAutoHarden}
         onOpenBreakIt={() => alert('Break It! game will open')}
-        onOpenPostmortem={() => alert('Postmortem will export')}
+        onOpenPostmortem={() => alert('Postmortem generator will open')}
         onOpenRealityCheck={() => alert('Reality check comparison')}
         isPresenterMode={isPresenterMode}
         onTogglePresenterMode={() => setIsPresenterMode(!isPresenterMode)}
@@ -168,18 +166,27 @@ export const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {!isPresenterMode && (
           <LeftPanel
-            selectedElement={selectedElement}
-            onInjectFault={(f) => alert(`Fault injected: ${f}`)}
-            onSetWorkload={(w) => alert(`Workload profile set: ${w}`)}
+            onInjectFault={(f) => {
+              addFault({
+                type: f as any,
+                target: currentSpec.services[currentSpec.services.length - 1]?.id || 'payment-provider',
+                start_s: 60,
+                end_s: 120,
+                factor: 5,
+              });
+              alert(`Fault "${f}" injected between t=60s and t=120s`);
+            }}
+            onSetWorkload={(w) => setWorkloadPattern(w)}
             onOpenBreakIt={() => alert('Break It! Game selected')}
             onOpenDefendIt={() => alert('Defend It! Game selected')}
           />
         )}
 
-        {/* Central Canvas */}
+        {/* Central Canvas with React Flow auto-layout */}
         <MainCanvas
-          onSelectNode={handleSelectNode}
-          selectedNodeId={selectedElement?.id || null}
+          onSelectNode={(nodeId) => selectElement('service', nodeId)}
+          onSelectEdge={(edgeId) => selectElement('edge', edgeId)}
+          selectedNodeId={null}
         />
 
         {!isPresenterMode && (

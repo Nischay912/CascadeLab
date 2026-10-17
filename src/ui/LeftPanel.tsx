@@ -12,10 +12,11 @@ import {
   Clock,
   ShieldCheck,
   Info,
+  Layers,
 } from 'lucide-react';
+import { useArchitectureStore } from '../state/useArchitectureStore';
 
 interface LeftPanelProps {
-  selectedElement: { type: 'service' | 'edge'; id: string; name?: string } | null;
   onInjectFault: (faultType: string) => void;
   onSetWorkload: (workloadType: string) => void;
   onOpenBreakIt: () => void;
@@ -23,13 +24,29 @@ interface LeftPanelProps {
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
-  selectedElement,
   onInjectFault,
   onSetWorkload,
   onOpenBreakIt,
   onOpenDefendIt,
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'inspector'>('library');
+  const {
+    currentSpec,
+    selectedElementId,
+    selectedElementType,
+    updateService,
+    updateEdge,
+  } = useArchitectureStore();
+
+  const selectedService =
+    selectedElementType === 'service'
+      ? currentSpec.services.find((s) => s.id === selectedElementId)
+      : null;
+
+  const selectedEdge =
+    selectedElementType === 'edge'
+      ? currentSpec.edges.find((e) => e.id === selectedElementId || `${e.from}->${e.to}` === selectedElementId)
+      : null;
 
   return (
     <aside className="w-80 bg-surface border-r border-border flex flex-col h-full select-none flex-shrink-0 z-20">
@@ -56,7 +73,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         >
           <Sliders className="w-3.5 h-3.5" />
           <span>Inspector</span>
-          {selectedElement && (
+          {(selectedService || selectedEdge) && (
             <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           )}
         </button>
@@ -77,11 +94,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { id: 'latency_provider', label: 'Payment Lag 5x', icon: Clock, color: 'text-amber-400' },
+                  { id: 'latency', label: 'Provider Lag 5x', icon: Clock, color: 'text-amber-400' },
                   { id: 'kill_instances', label: 'Kill 50% Nodes', icon: AlertTriangle, color: 'text-rose-400' },
                   { id: 'cache_flush', label: 'Wipe Redis Cache', icon: Shuffle, color: 'text-orange-400' },
                   { id: 'az_outage', label: 'Kill Zone B', icon: Server, color: 'text-red-400' },
-                  { id: 'inject_errors', label: '30% Error Rate', icon: Zap, color: 'text-pink-400' },
+                  { id: 'error', label: '30% Error Rate', icon: Zap, color: 'text-pink-400' },
                   { id: 'gray_failure', label: 'Gray Degradation', icon: AlertTriangle, color: 'text-yellow-300' },
                 ].map((fault) => (
                   <button
@@ -117,17 +134,25 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   <button
                     key={wl.id}
                     onClick={() => onSetWorkload(wl.id)}
-                    className="w-full p-2 rounded bg-surface-raised hover:bg-surface-hover border border-border hover:border-accent/40 text-left transition-colors flex items-center justify-between group"
+                    className={`w-full p-2 rounded border text-left transition-colors flex items-center justify-between group ${
+                      currentSpec.workload.pattern === wl.id
+                        ? 'bg-accent/15 border-accent/40 text-accent'
+                        : 'bg-surface-raised hover:bg-surface-hover border-border hover:border-accent/40 text-text-primary'
+                    }`}
                   >
                     <div>
-                      <div className="text-xs font-medium text-text-primary group-hover:text-accent">
+                      <div className="text-xs font-medium group-hover:text-accent">
                         {wl.title}
                       </div>
                       <div className="text-[10px] text-text-dim">{wl.desc}</div>
                     </div>
-                    <span className="text-[10px] text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                      Apply
-                    </span>
+                    {currentSpec.workload.pattern === wl.id ? (
+                      <span className="text-[10px] font-bold text-accent">Active</span>
+                    ) : (
+                      <span className="text-[10px] text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                        Apply
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -174,46 +199,183 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         ) : (
           /* Inspector Tab */
           <div className="h-full">
-            {selectedElement ? (
+            {selectedService ? (
               <div className="space-y-3">
                 <div className="p-3 bg-surface-raised rounded-lg border border-border">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
                     <Server className="w-4 h-4 text-accent" />
-                    <span className="font-semibold text-xs text-text-primary capitalize">
-                      {selectedElement.name || selectedElement.id}
+                    <span className="font-semibold text-xs text-text-primary capitalize truncate">
+                      {selectedService.name || selectedService.id}
                     </span>
                     <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface text-text-muted">
-                      {selectedElement.type}
+                      Service
                     </span>
                   </div>
-                  <div className="space-y-2 text-xs">
+
+                  <div className="space-y-2.5 text-xs">
                     <div>
-                      <label className="text-[10px] text-text-muted block">Instances (Min / Max)</label>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
+                        <span>Instances (Replicas)</span>
+                        <span className="text-accent font-mono">{selectedService.instances.initial}</span>
+                      </div>
                       <input
-                        type="text"
-                        defaultValue="4 (min 4, max 12)"
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-xs text-text-primary font-mono"
+                        type="range"
+                        min={selectedService.instances.min}
+                        max={selectedService.instances.max}
+                        value={selectedService.instances.initial}
+                        onChange={(e) =>
+                          updateService(selectedService.id, {
+                            instances: {
+                              ...selectedService.instances,
+                              initial: Number(e.target.value),
+                            },
+                          })
+                        }
+                        className="w-full accent-accent cursor-pointer"
                       />
                     </div>
+
                     <div>
-                      <label className="text-[10px] text-text-muted block">Worker Concurrency</label>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
+                        <span>Worker Concurrency</span>
+                        <span className="text-text-primary font-mono">{selectedService.concurrency}</span>
+                      </div>
                       <input
                         type="number"
-                        defaultValue={50}
+                        value={selectedService.concurrency}
+                        onChange={(e) =>
+                          updateService(selectedService.id, {
+                            concurrency: Number(e.target.value),
+                          })
+                        }
                         className="w-full bg-surface border border-border rounded px-2 py-1 text-xs text-text-primary font-mono"
                       />
                     </div>
+
                     <div>
-                      <label className="text-[10px] text-text-muted block">Service Time Own (ms)</label>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
+                        <span>Own Service Time (ms)</span>
+                        <span className="text-text-primary font-mono">{selectedService.service_time_ms} ms</span>
+                      </div>
                       <input
                         type="number"
-                        defaultValue={5}
+                        value={selectedService.service_time_ms}
+                        onChange={(e) =>
+                          updateService(selectedService.id, {
+                            service_time_ms: Number(e.target.value),
+                          })
+                        }
                         className="w-full bg-surface border border-border rounded px-2 py-1 text-xs text-text-primary font-mono"
                       />
                     </div>
+
+                    <div className="pt-2 border-t border-border flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-medium text-text-primary block">Load Shedding</span>
+                        <span className="text-[10px] text-text-dim">Drop requests at 80% queue</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedService.load_shedding?.enabled || false}
+                        onChange={(e) =>
+                          updateService(selectedService.id, {
+                            load_shedding: {
+                              enabled: e.target.checked,
+                              threshold: 0.8,
+                            },
+                          })
+                        }
+                        className="w-4 h-4 accent-accent rounded cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : selectedEdge ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-surface-raised rounded-lg border border-border">
+                  <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border">
+                    <Layers className="w-4 h-4 text-accent" />
+                    <span className="font-semibold text-xs text-text-primary truncate">
+                      {selectedEdge.from} → {selectedEdge.to}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] text-text-muted mb-1">
+                        <span>Max Retries</span>
+                        <span className="text-orange-400 font-mono font-bold">{selectedEdge.retries}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={5}
+                        value={selectedEdge.retries}
+                        onChange={(e) =>
+                          updateEdge(selectedEdge.id || `${selectedEdge.from}->${selectedEdge.to}`, {
+                            retries: Number(e.target.value),
+                          })
+                        }
+                        className="w-full accent-accent cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-text-muted block mb-1">Retry Backoff Mode</label>
+                      <select
+                        value={selectedEdge.backoff.mode}
+                        onChange={(e) =>
+                          updateEdge(selectedEdge.id || `${selectedEdge.from}->${selectedEdge.to}`, {
+                            backoff: {
+                              ...selectedEdge.backoff,
+                              mode: e.target.value as any,
+                            },
+                          })
+                        }
+                        className="w-full bg-surface border border-border rounded px-2 py-1 text-xs text-text-primary"
+                      >
+                        <option value="none">None (Immediate burst)</option>
+                        <option value="fixed">Fixed Delay</option>
+                        <option value="exponential">Exponential Backoff</option>
+                      </select>
+                    </div>
+
                     <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-text-muted">Load Shedding</span>
-                      <input type="checkbox" defaultChecked={false} className="rounded" />
+                      <span className="text-[11px] text-text-muted">Jitter (spread retries)</span>
+                      <input
+                        type="checkbox"
+                        checked={selectedEdge.backoff.jitter || false}
+                        onChange={(e) =>
+                          updateEdge(selectedEdge.id || `${selectedEdge.from}->${selectedEdge.to}`, {
+                            backoff: {
+                              ...selectedEdge.backoff,
+                              jitter: e.target.checked,
+                            },
+                          })
+                        }
+                        className="w-4 h-4 accent-accent rounded cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-border flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-medium text-text-primary block">Circuit Breaker</span>
+                        <span className="text-[10px] text-text-dim">Fast-fail when error rate &gt; 50%</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedEdge.circuit_breaker?.enabled || false}
+                        onChange={(e) =>
+                          updateEdge(selectedEdge.id || `${selectedEdge.from}->${selectedEdge.to}`, {
+                            circuit_breaker: {
+                              ...selectedEdge.circuit_breaker,
+                              enabled: e.target.checked,
+                            },
+                          })
+                        }
+                        className="w-4 h-4 accent-accent rounded cursor-pointer"
+                      />
                     </div>
                   </div>
                 </div>

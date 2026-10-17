@@ -1,0 +1,568 @@
+name: ShopFast (Naive Defaults)
+description: 13-microservice e-commerce store with common startup anti-patterns (unbounded retries, single-point-of-failure DB, no circuit breaker).
+slo:
+  success_pct: 99
+  p95_ms: 800
+value_per_request_inr: 40
+services:
+  - id: gateway
+    name: API Gateway
+    role: Entry Point & Routing
+    entry: true
+    instances:
+      initial: 4
+      min: 4
+      max: 12
+    concurrency: 50
+    service_time_ms: 5
+    queue_limit: 200
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2500
+    zone_spread:
+      - a
+      - b
+  - id: auth
+    name: Auth Service
+    role: Token Verification
+    entry: false
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 40
+    service_time_ms: 10
+    queue_limit: 150
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2000
+    zone_spread:
+      - a
+      - b
+  - id: catalog
+    name: Catalog Service
+    role: Product Browsing
+    entry: false
+    instances:
+      initial: 4
+      min: 3
+      max: 10
+    concurrency: 40
+    service_time_ms: 20
+    queue_limit: 200
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2000
+    zone_spread:
+      - a
+      - b
+  - id: cart
+    name: Cart Service
+    role: Basket Management
+    entry: false
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 40
+    service_time_ms: 15
+    queue_limit: 150
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2000
+    zone_spread:
+      - a
+      - b
+  - id: checkout
+    name: Checkout Service
+    role: Order Orchestration
+    entry: false
+    instances:
+      initial: 4
+      min: 3
+      max: 10
+    concurrency: 30
+    service_time_ms: 30
+    queue_limit: 150
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2500
+    zone_spread:
+      - a
+      - b
+  - id: payments
+    name: Payments Hub
+    role: Transaction Dispatcher
+    entry: false
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 30
+    service_time_ms: 40
+    queue_limit: 100
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2500
+    zone_spread:
+      - a
+      - b
+  - id: payment-provider
+    name: External Payment Gateway
+    role: 3rd Party Provider (The Villain)
+    entry: false
+    instances:
+      initial: 2
+      min: 2
+      max: 2
+    concurrency: 100
+    service_time_ms: 120
+    queue_limit: 300
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: false
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: false
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 0
+    zone_spread:
+      - a
+  - id: inventory
+    name: Inventory Service
+    role: Stock Reservation
+    entry: false
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 30
+    service_time_ms: 20
+    queue_limit: 150
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2000
+    zone_spread:
+      - a
+      - b
+  - id: recommender
+    name: Recommender Service
+    role: ML Suggestions (Non-critical)
+    entry: false
+    instances:
+      initial: 2
+      min: 2
+      max: 6
+    concurrency: 20
+    service_time_ms: 60
+    queue_limit: 100
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 3500
+    zone_spread:
+      - a
+      - b
+  - id: notifications
+    name: Notification Queue
+    role: Async Email / SMS
+    entry: false
+    instances:
+      initial: 2
+      min: 2
+      max: 6
+    concurrency: 50
+    service_time_ms: 10
+    queue_limit: 500
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: true
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: false
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 1500
+    zone_spread:
+      - a
+      - b
+  - id: cache
+    name: Redis Cache
+    role: In-Memory Store
+    entry: false
+    instances:
+      initial: 2
+      min: 2
+      max: 4
+    concurrency: 500
+    service_time_ms: 1
+    queue_limit: 1000
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: false
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: false
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 4000
+    zone_spread:
+      - a
+      - b
+  - id: products-db
+    name: Products Database
+    role: Catalog Data Store
+    entry: false
+    instances:
+      initial: 2
+      min: 2
+      max: 4
+    concurrency: 100
+    service_time_ms: 8
+    queue_limit: 500
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: false
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: false
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 6000
+    zone_spread:
+      - a
+      - b
+  - id: orders-db
+    name: Orders Database (SPOF)
+    role: Transactional Store (Single Node)
+    entry: false
+    instances:
+      initial: 1
+      min: 1
+      max: 1
+    concurrency: 80
+    service_time_ms: 10
+    queue_limit: 400
+    load_shedding:
+      enabled: false
+      threshold: 0.8
+    autoscale:
+      enabled: false
+      target_util: 0.6
+      eval_period_s: 15
+      startup_delay_s: 45
+      cooldown_s: 120
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 7500
+    zone_spread:
+      - a
+edges:
+  - id: gateway->auth
+    from: gateway
+    to: auth
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 300
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: gateway->catalog
+    from: gateway
+    to: catalog
+    calls_per_request: 0.6
+    mode: sync
+    critical: true
+    timeout_ms: 800
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: gateway->cart
+    from: gateway
+    to: cart
+    calls_per_request: 0.25
+    mode: sync
+    critical: true
+    timeout_ms: 800
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: gateway->checkout
+    from: gateway
+    to: checkout
+    calls_per_request: 0.08
+    mode: sync
+    critical: true
+    timeout_ms: 3000
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: gateway->recommender
+    from: gateway
+    to: recommender
+    calls_per_request: 0.3
+    mode: sync
+    critical: false
+    timeout_ms: 500
+    retries: 2
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: catalog->cache
+    from: catalog
+    to: cache
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 200
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 20
+      max_delay_ms: 200
+    circuit_breaker:
+      enabled: false
+    cache:
+      hit_ratio: 0.9
+      warm_time_s: 30
+  - id: catalog->products-db
+    from: catalog
+    to: products-db
+    calls_per_request: 0.1
+    mode: sync
+    critical: true
+    timeout_ms: 400
+    retries: 1
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: checkout->inventory
+    from: checkout
+    to: inventory
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 800
+    retries: 2
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: checkout->payments
+    from: checkout
+    to: payments
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 2000
+    retries: 3
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 100
+      max_delay_ms: 1000
+    circuit_breaker:
+      enabled: false
+  - id: checkout->orders-db
+    from: checkout
+    to: orders-db
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 1000
+    retries: 2
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: checkout->notifications
+    from: checkout
+    to: notifications
+    calls_per_request: 1
+    mode: async
+    critical: false
+    timeout_ms: 500
+    retries: 0
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: false
+  - id: payments->payment-provider
+    from: payments
+    to: payment-provider
+    calls_per_request: 1
+    mode: sync
+    critical: true
+    timeout_ms: 1500
+    retries: 2
+    backoff:
+      mode: none
+      jitter: false
+      base_delay_ms: 100
+      max_delay_ms: 1000
+    circuit_breaker:
+      enabled: false
+workload:
+  entry: gateway
+  pattern: flash_sale
+  base_rps: 600
+  multiplier: 3
+  duration_s: 180
+  ramp_time_s: 30
+faults:
+  - id: f_latency_provider
+    type: latency
+    target: payment-provider
+    factor: 5
+    start_s: 60
+    end_s: 120
+seed: 42
