@@ -123,16 +123,16 @@ services:
     entry: false
     instances:
       initial: 4
-      min: 3
-      max: 10
-    concurrency: 30
+      min: 4
+      max: 4
+    concurrency: 10
     service_time_ms: 30
     queue_limit: 150
     load_shedding:
       enabled: false
       threshold: 0.8
     autoscale:
-      enabled: true
+      enabled: false
       target_util: 0.6
       eval_period_s: 15
       startup_delay_s: 45
@@ -151,16 +151,16 @@ services:
     entry: false
     instances:
       initial: 3
-      min: 2
-      max: 8
-    concurrency: 30
+      min: 3
+      max: 3
+    concurrency: 10
     service_time_ms: 40
     queue_limit: 100
     load_shedding:
       enabled: false
       threshold: 0.8
     autoscale:
-      enabled: true
+      enabled: false
       target_util: 0.6
       eval_period_s: 15
       startup_delay_s: 45
@@ -416,7 +416,7 @@ edges:
   - id: gateway->checkout
     from: gateway
     to: checkout
-    calls_per_request: 0.08
+    calls_per_request: 0.15
     mode: sync
     critical: true
     timeout_ms: 3000

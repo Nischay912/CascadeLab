@@ -44,9 +44,9 @@ export function getOfferedWorkloadRps(workload: WorkloadSpec, t: number): number
         const ramp = (t - 30) / 15;
         return base_rps + (peakRps - base_rps) * ramp;
       }
-      if (t <= 120) return peakRps;
-      if (t < 150) {
-        const cooldown = (150 - t) / 30;
+      if (t <= 165) return peakRps;
+      if (t < 180) {
+        const cooldown = (180 - t) / 15;
         return base_rps + (peakRps - base_rps) * cooldown;
       }
       return base_rps;

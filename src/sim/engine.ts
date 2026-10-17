@@ -28,6 +28,9 @@ export interface ServiceSimulationState {
   successRate: number; // 0..100
   overloadSeconds: number;
   restartTimer: number;
+  baseInstances: number;
+  pendingAutoscale: Array<{ readyAtTime: number; count: number }>;
+  cooldownTimer: number;
 }
 
 export interface EdgeSimulationState {
@@ -111,6 +114,9 @@ export class SimulationEngine {
         successRate: 100.0,
         overloadSeconds: 0,
         restartTimer: 0,
+        baseInstances: svc.instances.initial,
+        pendingAutoscale: [],
+        cooldownTimer: 0,
       });
     }
 
@@ -169,7 +175,11 @@ export class SimulationEngine {
       const edgeId = edge.id || `${edge.from}->${edge.to}`;
       const edgeState = this.edgeStates.get(edgeId)!;
       const callee = this.serviceStates.get(edge.to);
-      const edgeMod = edgeModifiers.get(edgeId) || { isCut: false, cacheHitMultiplier: 1.0 };
+      const edgeMod =
+        edgeModifiers.get(edgeId) ||
+        edgeModifiers.get(edge.to) ||
+        edgeModifiers.get(edge.from) ||
+        { isCut: false, cacheHitMultiplier: 1.0 };
 
       if (!callee || edgeMod.isCut) {
         edgeWaitPerCall.set(edgeId, edge.timeout_ms);
@@ -247,21 +257,36 @@ export class SimulationEngine {
       edgeState.waitHeldMs = waitHeld;
 
       // Rolling failure tracking for circuit breaker
-      edgeState.rollingCalls += Math.max(1, Math.round(attempts));
-      if (f > 0.4) {
-        edgeState.rollingFailures += Math.max(1, Math.round(attempts * f));
+      const caller = this.serviceStates.get(edge.from);
+      const callerArrival = caller?.arrivalRate || (edge.from === this.spec.workload.entry ? offeredEntryRps : 1);
+      const actualCalls = Math.max(1, Math.round(callerArrival * p_eff * attempts));
+      const actualFailures = Math.max(0, Math.round(actualCalls * f));
+
+      edgeState.rollingCalls += actualCalls;
+      if (f > 0.3) {
+        edgeState.rollingFailures += actualFailures;
       }
 
-      if (edge.circuit_breaker.enabled && edgeState.rollingCalls >= edge.circuit_breaker.min_calls) {
-        const failureRate = edgeState.rollingFailures / edgeState.rollingCalls;
-        if (failureRate >= edge.circuit_breaker.failure_rate_threshold) {
-          edgeState.circuitBreakerState = 'open';
-          edgeState.circuitBreakerTimer = edge.circuit_breaker.open_duration_s;
-          edgeState.rollingCalls = 0;
-          edgeState.rollingFailures = 0;
+      if (edge.circuit_breaker.enabled) {
+        if (edgeState.circuitBreakerState === 'closed') {
+          if (edgeState.rollingCalls >= edge.circuit_breaker.min_calls) {
+            const failureRate = edgeState.rollingFailures / edgeState.rollingCalls;
+            if (failureRate >= edge.circuit_breaker.failure_rate_threshold) {
+              edgeState.circuitBreakerState = 'open';
+              edgeState.circuitBreakerTimer = edge.circuit_breaker.open_duration_s;
+              edgeState.rollingCalls = 0;
+              edgeState.rollingFailures = 0;
+            }
+          }
         } else if (edgeState.circuitBreakerState === 'half_open') {
-          // Closed again if successful
-          edgeState.circuitBreakerState = 'closed';
+          if (f < 0.2) {
+            edgeState.circuitBreakerState = 'closed';
+            edgeState.rollingCalls = 0;
+            edgeState.rollingFailures = 0;
+          } else if (f >= edge.circuit_breaker.failure_rate_threshold) {
+            edgeState.circuitBreakerState = 'open';
+            edgeState.circuitBreakerTimer = edge.circuit_breaker.open_duration_s;
+          }
         }
       }
 
@@ -334,8 +359,52 @@ export class SimulationEngine {
         grayDegradationMs: 0.0,
       };
 
+      // Autoscaling evaluation
+      // 1. Process pending autoscale instances arriving
+      const remainingPending: Array<{ readyAtTime: number; count: number }> = [];
+      for (const item of svcState.pendingAutoscale) {
+        if (t >= item.readyAtTime) {
+          svcState.baseInstances = Math.min(svc.instances.max, svcState.baseInstances + item.count);
+          svcState.instancesStarting = Math.max(0, svcState.instancesStarting - item.count);
+        } else {
+          remainingPending.push(item);
+        }
+      }
+      svcState.pendingAutoscale = remainingPending;
+
+      // 2. Periodic evaluation
+      if (svc.autoscale.enabled && t > 0 && t % svc.autoscale.eval_period_s === 0) {
+        const currentTotal = svcState.baseInstances + svcState.instancesStarting;
+        if (svcState.utilization > svc.autoscale.target_util && currentTotal < svc.instances.max) {
+          const desired = Math.min(
+            svc.instances.max,
+            Math.ceil((svcState.baseInstances * svcState.utilization) / svc.autoscale.target_util)
+          );
+          const toAdd = Math.min(
+            desired - currentTotal,
+            Math.max(1, Math.ceil(svcState.baseInstances * 0.5)),
+            svc.instances.max - currentTotal
+          );
+          if (toAdd > 0) {
+            svcState.instancesStarting += toAdd;
+            svcState.pendingAutoscale.push({
+              readyAtTime: t + svc.autoscale.startup_delay_s,
+              count: toAdd,
+            });
+          }
+        } else if (svcState.utilization < 0.5 * svc.autoscale.target_util && svcState.baseInstances > svc.instances.min) {
+          svcState.cooldownTimer += svc.autoscale.eval_period_s;
+          if (svcState.cooldownTimer >= svc.autoscale.cooldown_s) {
+            svcState.baseInstances = Math.max(svc.instances.min, svcState.baseInstances - 1);
+            svcState.cooldownTimer = 0;
+          }
+        } else {
+          svcState.cooldownTimer = 0;
+        }
+      }
+
       // Zone outage check
-      let activeReplicas = svc.instances.initial;
+      let activeReplicas = svcState.baseInstances;
       if (svc.zone_spread.some((z) => downZones.has(z))) {
         activeReplicas = Math.max(1, Math.floor(activeReplicas / 2));
       }
