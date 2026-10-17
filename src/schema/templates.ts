@@ -427,11 +427,29 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
     return svc;
   }),
   edges: shopFastNaiveTemplate.edges.map((edge) => {
+    const baseBackoff =
+      edge.retries > 0
+        ? {
+            mode: 'exponential' as const,
+            jitter: true,
+            base_delay_ms: edge.backoff?.base_delay_ms || 50,
+            max_delay_ms: edge.backoff?.max_delay_ms || 1000,
+          }
+        : edge.backoff;
+
+    if (edge.from === 'gateway' && edge.to === 'checkout') {
+      return {
+        ...edge,
+        retries: 0,
+        backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 100, max_delay_ms: 1000 },
+        circuit_breaker: { enabled: true, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
+      };
+    }
     if (edge.from === 'checkout' && edge.to === 'payments') {
       return {
         ...edge,
-        retries: 2,
-        backoff: { mode: 'exponential', jitter: true, base_delay_ms: 100, max_delay_ms: 1500 },
+        retries: 1,
+        backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 100, max_delay_ms: 1500 },
         circuit_breaker: { enabled: true, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       };
     }
@@ -439,11 +457,24 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
       return {
         ...edge,
         retries: 1,
-        backoff: { mode: 'exponential', jitter: true, base_delay_ms: 150, max_delay_ms: 2000 },
+        backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 150, max_delay_ms: 2000 },
         circuit_breaker: { enabled: true, failure_rate_threshold: 0.4, min_calls: 10, open_duration_s: 20, probe_fraction: 0.05 },
       };
     }
-    return edge;
+    return {
+      ...edge,
+      backoff: baseBackoff,
+      circuit_breaker:
+        edge.critical && edge.mode === 'sync'
+          ? {
+              enabled: true,
+              failure_rate_threshold: 0.5,
+              min_calls: 10,
+              open_duration_s: 15,
+              probe_fraction: 0.1,
+            }
+          : edge.circuit_breaker,
+    };
   }),
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from './ui/TopNav';
 import { LeftPanel } from './ui/LeftPanel';
 import { MainCanvas } from './ui/MainCanvas';
@@ -6,12 +6,14 @@ import { RightPanel } from './ui/RightPanel';
 import { BottomTimeline } from './ui/BottomTimeline';
 import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
+import { runLinter, applyLintFix, LintFinding } from './lint';
 
 export const App: React.FC = () => {
   const {
     currentSpec,
     activeTemplateKey,
     loadTemplate,
+    setSpec,
     selectElement,
     addFault,
     setWorkloadPattern,
@@ -37,11 +39,21 @@ export const App: React.FC = () => {
     resetSimulation,
   } = useSimulationStore();
 
-  const [resilienceScore, setResilienceScore] = useState<number>(38);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Initialize simulation batch when component mounts or spec changes
+  // Compute live architecture lint report
+  const lintReport = useMemo(() => runLinter(currentSpec), [currentSpec]);
+  const [findings, setFindings] = useState<LintFinding[]>(lintReport.findings);
+  const [resilienceScore, setResilienceScore] = useState<number>(lintReport.staticResilienceScore);
+
+  // Keep findings and score synced whenever currentSpec changes
+  useEffect(() => {
+    setFindings(lintReport.findings);
+    setResilienceScore(lintReport.staticResilienceScore);
+  }, [lintReport]);
+
+  // Initialize simulation batch when spec or seed changes
   useEffect(() => {
     initializeSimulation(currentSpec, seed);
   }, [currentSpec, seed, initializeSimulation]);
@@ -80,46 +92,6 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleRunning, resetSimulation, setSpeed]);
 
-  // Linter & Root Cause state
-  const [findings, setFindings] = useState<any[]>([
-    {
-      id: 'f1',
-      ruleId: 'L1',
-      severity: 'critical',
-      title: 'Retry Storm Trap',
-      target: 'checkout → payments',
-      reason: '3 retries configured with no backoff and no jitter on critical order path.',
-      fix: 'Add exponential backoff with jitter (mode: exponential, jitter: true)',
-    },
-    {
-      id: 'f2',
-      ruleId: 'L8',
-      severity: 'critical',
-      title: 'Single Point of Failure (SPOF)',
-      target: 'orders-db',
-      reason: 'Single instance database on order write critical path with no read replica.',
-      fix: 'Increase instances from 1 to 2 with multi-zone spread',
-    },
-    {
-      id: 'f3',
-      ruleId: 'L7',
-      severity: 'warning',
-      title: 'Missing Circuit Breaker',
-      target: 'payments → provider',
-      reason: 'Synchronous external dependency has no circuit breaker to trip on provider brownout.',
-      fix: 'Enable circuit breaker with 50% error threshold over 10s',
-    },
-    {
-      id: 'f4',
-      ruleId: 'L10',
-      severity: 'warning',
-      title: 'Missing Load Shedding',
-      target: 'gateway',
-      reason: 'API Gateway queue will overflow without early 503 shedding during spikes.',
-      fix: 'Enable load shedding at 80% queue saturation',
-    },
-  ]);
-
   const [rootCause] = useState<any>({
     origin: originNodeId || 'payment-provider',
     pattern: 'retry_storm_cascade',
@@ -137,19 +109,21 @@ export const App: React.FC = () => {
   const handleRunLinter = () => {
     setIsAnalyzing(true);
     setTimeout(() => {
+      const rep = runLinter(currentSpec);
+      setFindings(rep.findings);
+      setResilienceScore(rep.staticResilienceScore);
       setIsAnalyzing(false);
-    }, 600);
+    }, 400);
   };
 
   const handleApplyFix = (findingId: string) => {
-    setFindings((prev) => prev.filter((f) => f.id !== findingId));
-    setResilienceScore((prev) => Math.min(100, prev + 12));
+    const updatedSpec = applyLintFix(currentSpec, findingId);
+    setSpec(updatedSpec);
+    runSimulationBatch(updatedSpec, 180, seed);
   };
 
   const handleAutoHarden = () => {
     loadTemplate('shopfast_hardened');
-    setResilienceScore(84);
-    setFindings([]);
   };
 
   const handleScenarioChange = useCallback(
