@@ -7,6 +7,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { ArchitectureGraph } from '../viz/ArchitectureGraph';
+import { ChaosMatrixView } from '../chaos/ChaosMatrixView';
+import { CapacityCliffView } from '../chaos/CapacityCliffView';
 
 interface MainCanvasProps {
   onSelectNode: (nodeId: string) => void;
@@ -84,29 +86,9 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
           </div>
         )}
 
-        {activeTab === 'chaos' && (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-text-muted">
-            <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-status-failing mb-4 shadow-noc">
-              <Grid className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-text-primary mb-2">Chaos Suite & Resilience Matrix Heatmap</h3>
-            <p className="text-xs text-text-muted max-w-md leading-relaxed">
-              Automated 40+ failure permutations across all 13 services to calculate composite resilience score and map weak failure surfaces.
-            </p>
-          </div>
-        )}
+        {activeTab === 'chaos' && <ChaosMatrixView />}
 
-        {activeTab === 'capacity' && (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-text-muted">
-            <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-amber-400 mb-4 shadow-noc">
-              <TrendingDown className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-text-primary mb-2">Capacity Cliff & Bottleneck Knee</h3>
-            <p className="text-xs text-text-muted max-w-md leading-relaxed">
-              Offered load sweep graphing Goodput vs. Load to locate system saturation points and pinpoint the primary bottleneck.
-            </p>
-          </div>
-        )}
+        {activeTab === 'capacity' && <CapacityCliffView />}
 
         {activeTab === 'reality' && (
           <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-text-muted">
