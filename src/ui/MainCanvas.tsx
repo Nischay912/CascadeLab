@@ -5,10 +5,13 @@ import {
   Grid,
   TrendingDown,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import { ArchitectureGraph } from '../viz/ArchitectureGraph';
 import { ChaosMatrixView } from '../chaos/ChaosMatrixView';
 import { CapacityCliffView } from '../chaos/CapacityCliffView';
+import { SplitScreenReplayView } from '../optimizer/SplitScreenReplayView';
+import { ParetoFrontView } from '../optimizer/ParetoFrontView';
 
 interface MainCanvasProps {
   onSelectNode: (nodeId: string) => void;
@@ -21,7 +24,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
   onSelectEdge,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'graph' | 'split' | 'chaos' | 'capacity' | 'reality'
+    'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality'
   >('graph');
 
   return (
@@ -32,6 +35,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
           {[
             { id: 'graph', label: 'Architecture Graph', icon: Network },
             { id: 'split', label: 'Split-Screen Replay', icon: Columns2 },
+            { id: 'optimizer', label: 'Auto-Harden (Pareto)', icon: Sparkles },
             { id: 'chaos', label: 'Chaos Matrix', icon: Grid },
             { id: 'capacity', label: 'Capacity Cliff', icon: TrendingDown },
             { id: 'reality', label: 'Reality Check', icon: Layers },
@@ -73,18 +77,9 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
           />
         )}
 
-        {/* Finished Mockup Views for other tabs */}
-        {activeTab === 'split' && (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-text-muted">
-            <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-accent mb-4 shadow-noc">
-              <Columns2 className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-text-primary mb-2">Split-Screen Before vs After Replay</h3>
-            <p className="text-xs text-text-muted max-w-md leading-relaxed">
-              Run the exact same disaster scenario with identical deterministic seed side by side to visually contrast unhardened collapse vs. hardened resilience.
-            </p>
-          </div>
-        )}
+        {activeTab === 'split' && <SplitScreenReplayView />}
+
+        {activeTab === 'optimizer' && <ParetoFrontView />}
 
         {activeTab === 'chaos' && <ChaosMatrixView />}
 
