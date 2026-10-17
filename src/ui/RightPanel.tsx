@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShieldAlert,
   AlertTriangle,
@@ -8,7 +8,11 @@ import {
   TrendingUp,
   RotateCcw,
   Sparkles,
+  FileText,
 } from 'lucide-react';
+import { useArchitectureStore } from '../state/useArchitectureStore';
+import { useSimulationStore } from '../state/useSimulationStore';
+import { PostmortemModal, generatePostmortem, PostmortemData } from '../postmortem';
 
 interface Finding {
   id: string;
@@ -44,6 +48,21 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onApplyFix,
   isAnalyzing,
 }) => {
+  const currentSpec = useArchitectureStore((state) => state.currentSpec);
+  const simulationHistory = useSimulationStore((state) => state.history);
+  const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
+  const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
+
+  const handleOpenPostmortem = () => {
+    const report = generatePostmortem(
+      currentSpec,
+      simulationHistory.length > 0 ? simulationHistory : [],
+      'Cascading Failure Incident'
+    );
+    setPostmortemData(report);
+    setIsPostmortemOpen(true);
+  };
+
   return (
     <aside className="w-80 bg-surface border-l border-border flex flex-col h-full select-none flex-shrink-0 z-20">
       {/* Upper Half: Architecture Findings (Linter) */}
@@ -188,6 +207,15 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Generate Postmortem Action Button */}
+              <button
+                onClick={handleOpenPostmortem}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-accent hover:bg-accent-hover text-background text-xs font-bold w-full justify-center shadow-noc transition-all mt-3"
+              >
+                <FileText className="w-3.5 h-3.5 fill-current" />
+                <span>Generate SRE Postmortem (PDF/MD)</span>
+              </button>
             </div>
           ) : (
             /* Designed Root Cause Empty State */
@@ -196,13 +224,29 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 <AlertTriangle className="w-5 h-5 text-text-dim" />
               </div>
               <h4 className="text-xs font-semibold text-text-primary mb-1">System Healthy</h4>
-              <p className="text-[11px] text-text-dim leading-relaxed max-w-[210px]">
-                No cascading failure detected. Trigger a fault or surge from the Library to watch the root-cause engine isolate culprits.
+              <p className="text-[11px] text-text-dim leading-relaxed max-w-[210px] mb-3">
+                No active cascading incident. Trigger a disaster from the Library to watch the root-cause engine isolate culprits.
               </p>
+              <button
+                onClick={handleOpenPostmortem}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface-hover text-text-muted hover:text-text-primary border border-border text-xs transition-all"
+              >
+                <FileText className="w-3 h-3 text-accent" />
+                <span>View Architecture Report</span>
+              </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Postmortem Modal Dialog */}
+      {postmortemData && (
+        <PostmortemModal
+          postmortem={postmortemData}
+          isOpen={isPostmortemOpen}
+          onClose={() => setIsPostmortemOpen(false)}
+        />
+      )}
     </aside>
   );
 };
