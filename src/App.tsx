@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TopNav } from './ui/TopNav';
 import { LeftPanel } from './ui/LeftPanel';
 import { MainCanvas } from './ui/MainCanvas';
 import { RightPanel } from './ui/RightPanel';
 import { BottomTimeline } from './ui/BottomTimeline';
 import { useArchitectureStore } from './state/useArchitectureStore';
+import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 
 export const App: React.FC = () => {
   const {
@@ -16,16 +17,70 @@ export const App: React.FC = () => {
     setWorkloadPattern,
   } = useArchitectureStore();
 
-  // Playback & Presenter state
-  const [isRunning, setIsRunning] = useState(false);
-  const [speed, setSpeed] = useState<number>(1);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  const [selectedScenario, setSelectedScenario] = useState('baseline');
+  const {
+    currentTime,
+    maxTime,
+    isRunning,
+    speed,
+    seed,
+    history,
+    currentMetrics,
+    originNodeId,
+    selectedScenario,
+    initializeSimulation,
+    runSimulationBatch,
+    setCurrentTime,
+    setSpeed,
+    setScenario,
+    toggleRunning,
+    stepForward,
+    resetSimulation,
+  } = useSimulationStore();
+
   const [resilienceScore, setResilienceScore] = useState<number>(38);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Initialize simulation batch when component mounts or spec changes
+  useEffect(() => {
+    initializeSimulation(currentSpec, seed);
+  }, [currentSpec, seed, initializeSimulation]);
+
+  // Playback timer tick loop
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => {
+      stepForward();
+    }, 1000 / speed);
+    return () => clearInterval(interval);
+  }, [isRunning, speed, stepForward]);
+
+  // Global hotkeys: Space (Play/Pause), R (Reset), 1, 2, 3 (Speed), P (Presenter Mode)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleRunning();
+      } else if (e.key === 'r' || e.key === 'R') {
+        resetSimulation();
+      } else if (e.key === '1') {
+        setSpeed(1);
+      } else if (e.key === '2') {
+        setSpeed(4);
+      } else if (e.key === '3') {
+        setSpeed(16);
+      } else if (e.key === 'p' || e.key === 'P') {
+        setIsPresenterMode((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleRunning, resetSimulation, setSpeed]);
 
   // Linter & Root Cause state
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [findings, setFindings] = useState<any[]>([
     {
       id: 'f1',
@@ -66,7 +121,7 @@ export const App: React.FC = () => {
   ]);
 
   const [rootCause] = useState<any>({
-    origin: 'payment-provider',
+    origin: originNodeId || 'payment-provider',
     pattern: 'retry_storm_cascade',
     confidence: 0.94,
     blastRadiusPct: 62,
@@ -78,45 +133,6 @@ export const App: React.FC = () => {
       'System remained at 30% success 60s after trigger ended (Metastable).',
     ],
   });
-
-  // Hotkeys: Space (Play/Pause), R (Reset), 1, 2, 3 (Speeds)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsRunning((prev) => !prev);
-      } else if (e.key === 'r' || e.key === 'R') {
-        setCurrentTime(0);
-        setIsRunning(false);
-      } else if (e.key === '1') {
-        setSpeed(1);
-      } else if (e.key === '2') {
-        setSpeed(4);
-      } else if (e.key === '3') {
-        setSpeed(16);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Simple tick loop when running
-  useEffect(() => {
-    if (!isRunning) return;
-    const interval = setInterval(() => {
-      setCurrentTime((prev) => {
-        if (prev >= 180) {
-          setIsRunning(false);
-          return 180;
-        }
-        return prev + 1;
-      });
-    }, 1000 / speed);
-    return () => clearInterval(interval);
-  }, [isRunning, speed]);
 
   const handleRunLinter = () => {
     setIsAnalyzing(true);
@@ -136,23 +152,31 @@ export const App: React.FC = () => {
     setFindings([]);
   };
 
+  const handleScenarioChange = useCallback(
+    (scenario: string) => {
+      setScenario(scenario as ScenarioType, currentSpec);
+    },
+    [setScenario, currentSpec]
+  );
+
   return (
-    <div className={`h-screen w-screen flex flex-col bg-background text-text-primary overflow-hidden font-sans ${isPresenterMode ? 'text-sm' : 'text-xs'}`}>
+    <div
+      className={`h-screen w-screen flex flex-col bg-background text-text-primary overflow-hidden font-sans ${
+        isPresenterMode ? 'text-sm' : 'text-xs'
+      }`}
+    >
       {/* Top NOC Bar */}
       <TopNav
         isRunning={isRunning}
-        onToggleRun={() => setIsRunning(!isRunning)}
-        onStep={() => setCurrentTime((t) => Math.min(180, t + 1))}
-        onReset={() => {
-          setIsRunning(false);
-          setCurrentTime(0);
-        }}
+        onToggleRun={toggleRunning}
+        onStep={stepForward}
+        onReset={resetSimulation}
         speed={speed}
         onChangeSpeed={setSpeed}
         selectedTemplate={activeTemplateKey}
         onSelectTemplate={(tpl) => loadTemplate(tpl)}
         selectedScenario={selectedScenario}
-        onSelectScenario={setSelectedScenario}
+        onSelectScenario={handleScenarioChange}
         resilienceScore={resilienceScore}
         onAutoHarden={handleAutoHarden}
         onOpenBreakIt={() => alert('Break It! game will open')}
@@ -160,6 +184,9 @@ export const App: React.FC = () => {
         onOpenRealityCheck={() => alert('Reality check comparison')}
         isPresenterMode={isPresenterMode}
         onTogglePresenterMode={() => setIsPresenterMode(!isPresenterMode)}
+        userSuccessRate={currentMetrics?.userSuccessRate}
+        userP95Ms={currentMetrics?.userP95Ms}
+        cumulativeMoneyLostInr={currentMetrics?.cumulativeMoneyLostInr}
       />
 
       {/* Main Workspace: Left Panel + Center Canvas + Right Panel */}
@@ -169,20 +196,25 @@ export const App: React.FC = () => {
             onInjectFault={(f) => {
               addFault({
                 type: f as any,
-                target: currentSpec.services[currentSpec.services.length - 1]?.id || 'payment-provider',
+                target:
+                  currentSpec.services[currentSpec.services.length - 1]?.id ||
+                  'payment-provider',
                 start_s: 60,
                 end_s: 120,
                 factor: 5,
               });
-              alert(`Fault "${f}" injected between t=60s and t=120s`);
+              runSimulationBatch(currentSpec, 180, seed);
             }}
-            onSetWorkload={(w) => setWorkloadPattern(w)}
+            onSetWorkload={(w) => {
+              setWorkloadPattern(w);
+              runSimulationBatch(currentSpec, 180, seed);
+            }}
             onOpenBreakIt={() => alert('Break It! Game selected')}
             onOpenDefendIt={() => alert('Defend It! Game selected')}
           />
         )}
 
-        {/* Central Canvas with React Flow auto-layout */}
+        {/* Central Canvas with React Flow auto-layout + ParticleCanvas overlay */}
         <MainCanvas
           onSelectNode={(nodeId) => selectElement('service', nodeId)}
           onSelectEdge={(edgeId) => selectElement('edge', edgeId)}
@@ -203,14 +235,16 @@ export const App: React.FC = () => {
       {/* Bottom Telemetry & Timeline Scrubber */}
       <BottomTimeline
         currentTime={currentTime}
-        maxTime={180}
+        maxTime={maxTime}
         onSeek={setCurrentTime}
-        successRate={currentTime > 60 && currentTime < 120 ? 32.4 : 99.2}
-        p95LatencyMs={currentTime > 60 && currentTime < 120 ? 1850 : 410}
-        externalRps={currentTime > 30 && currentTime < 90 ? 1800 : 600}
-        internalRps={currentTime > 60 && currentTime < 120 ? 2820 : 600}
-        activeInstances={currentTime > 70 && currentTime < 110 ? 32 : 36}
-        crashedInstances={currentTime > 70 && currentTime < 110 ? 4 : 0}
+        isRunning={isRunning}
+        onToggleRun={toggleRunning}
+        onStep={stepForward}
+        onReset={resetSimulation}
+        speed={speed}
+        onChangeSpeed={setSpeed}
+        currentMetrics={currentMetrics}
+        history={history}
       />
     </div>
   );

@@ -14,7 +14,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import { ServiceNode } from './ServiceNode';
 import { TrafficEdge } from './TrafficEdge';
+import { ParticleCanvas } from './ParticleCanvas';
 import { useArchitectureStore } from '../state/useArchitectureStore';
+import { useSimulationStore } from '../state/useSimulationStore';
 import {
   Share2,
   Upload,
@@ -23,6 +25,7 @@ import {
   Copy,
   Check,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { exportArchitectureToYaml } from '../schema/importers';
 
@@ -39,12 +42,14 @@ const GraphCanvasInner: React.FC<{
   onSelectEdge: (edgeId: string) => void;
 }> = ({ onSelectNode, onSelectEdge }) => {
   const { layout, currentSpec } = useArchitectureStore();
+  const { currentMetrics, originNodeId, history, currentTime, effectsEnabled, toggleEffects } =
+    useSimulationStore();
   const { fitView } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes as unknown as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges as unknown as Edge[]);
 
-  // Update ReactFlow nodes & edges whenever layout changes
+  // Update layout positions when spec changes
   useEffect(() => {
     setNodes(layout.nodes as unknown as Node[]);
     setEdges(layout.edges as unknown as Edge[]);
@@ -53,8 +58,92 @@ const GraphCanvasInner: React.FC<{
     }, 50);
   }, [layout, fitView, setNodes, setEdges]);
 
+  // Update node and edge metrics whenever simulation tick (currentMetrics) changes
+  useEffect(() => {
+    // Build recent history slice for sparklines (last 8 ticks up to currentTime)
+    const recentHistory = history.slice(Math.max(0, currentTime - 7), currentTime + 1);
+
+    setNodes((prevNodes) =>
+      prevNodes.map((node) => {
+        const svcMetrics = currentMetrics?.services[node.id];
+        const svcSpec = (node.data as any)?.service;
+        const initialReplicas = svcSpec?.instances?.initial ?? 4;
+        const ownServiceTime = svcSpec?.service_time_ms ?? 10;
+
+        const activeInstances = svcMetrics?.instancesReady ?? initialReplicas;
+        const crashedInstances = svcMetrics?.instancesCrashed ?? 0;
+        const startingInstances = svcMetrics?.instancesStarting ?? 0;
+        const rps = svcMetrics?.arrivalRate ?? 0;
+        const latencyMs = svcMetrics?.p95Ms ?? ownServiceTime;
+        const utilPct = (svcMetrics?.utilization ?? 0.2) * 100;
+        const queue = svcMetrics?.queue ?? 0;
+
+        let status: 'healthy' | 'degraded' | 'failing' | 'crashed' | 'recovering' = 'healthy';
+        if (activeInstances === 0) {
+          status = 'crashed';
+        } else if (crashedInstances > 0 || queue > 40 || utilPct >= 95) {
+          status = 'failing';
+        } else if (utilPct >= 70 || latencyMs > ownServiceTime * 2.5) {
+          status = 'degraded';
+        } else if (svcMetrics?.cooldownTimer && svcMetrics.cooldownTimer > 0) {
+          status = 'recovering';
+        }
+
+        const isOrigin =
+          originNodeId === node.id &&
+          Boolean(currentMetrics?.activeFaults && currentMetrics.activeFaults.length > 0);
+
+        const sparkline =
+          recentHistory.length > 0
+            ? recentHistory.map((h) => h.services[node.id]?.p95Ms ?? ownServiceTime)
+            : [ownServiceTime, ownServiceTime];
+
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            metrics: {
+              rps,
+              latencyMs,
+              utilizationPct: utilPct,
+              activeInstances,
+              crashedInstances,
+              startingInstances,
+              queue,
+              status,
+              isOrigin,
+              sparkline,
+            },
+          },
+        };
+      })
+    );
+
+    setEdges((prevEdges) =>
+      prevEdges.map((edge) => {
+        const edgeMetrics =
+          currentMetrics?.edges[edge.id] ||
+          currentMetrics?.edges[`${edge.source}->${edge.target}`];
+
+        return {
+          ...edge,
+          data: {
+            ...edge.data,
+            metrics: {
+              effectiveRps: edgeMetrics?.effectiveRps ?? 0,
+              retryAttempts: edgeMetrics?.retryAttempts ?? 1,
+              attemptFailureFraction: edgeMetrics?.attemptFailureFraction ?? 0,
+              circuitBreakerState: edgeMetrics?.circuitBreakerState ?? 'closed',
+              circuitBreakerTimer: edgeMetrics?.circuitBreakerTimer ?? 0,
+            },
+          },
+        };
+      })
+    );
+  }, [currentMetrics, originNodeId, history, currentTime, setNodes, setEdges]);
+
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative overflow-hidden">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -78,13 +167,38 @@ const GraphCanvasInner: React.FC<{
         />
       </ReactFlow>
 
-      {/* Floating Architecture Info Pill */}
-      <div className="absolute top-4 left-4 bg-surface/90 backdrop-blur border border-border px-3 py-1.5 rounded-lg shadow-noc pointer-events-none flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse" />
-        <span className="text-xs font-bold text-text-primary">{currentSpec.name}</span>
-        <span className="text-[10px] text-text-dim font-mono">
-          ({currentSpec.services.length} services, {currentSpec.edges.length} edges)
-        </span>
+      {/* 60 FPS HTML5 Canvas Overlay for Particles and Failure Wave ripples */}
+      <ParticleCanvas
+        nodes={nodes}
+        edges={edges}
+        currentMetrics={currentMetrics}
+        originNodeId={originNodeId}
+        effectsEnabled={effectsEnabled}
+      />
+
+      {/* Floating Architecture Info & Effect Toggle Pill */}
+      <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+        <div className="bg-surface/90 backdrop-blur border border-border px-3 py-1.5 rounded-lg shadow-noc pointer-events-none flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse" />
+          <span className="text-xs font-bold text-text-primary">{currentSpec.name}</span>
+          <span className="text-[10px] text-text-dim font-mono">
+            ({currentSpec.services.length} services, {currentSpec.edges.length} edges)
+          </span>
+        </div>
+
+        {/* Visual Effects Toggle (Accessibility / prefers-reduced-motion) */}
+        <button
+          onClick={toggleEffects}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border backdrop-blur text-xs font-medium transition-all shadow-noc ${
+            effectsEnabled
+              ? 'bg-accent/20 border-accent/40 text-accent'
+              : 'bg-surface/90 border-border text-text-muted hover:text-text-primary'
+          }`}
+          title="Toggle 60 FPS Particle Flow & Failure Wave ripples"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>{effectsEnabled ? 'Particles: ON' : 'Particles: OFF'}</span>
+        </button>
       </div>
     </div>
   );

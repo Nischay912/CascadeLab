@@ -33,6 +33,9 @@ interface TopNavProps {
   onOpenRealityCheck: () => void;
   isPresenterMode: boolean;
   onTogglePresenterMode: () => void;
+  userSuccessRate?: number;
+  userP95Ms?: number;
+  cumulativeMoneyLostInr?: number;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -53,6 +56,9 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenRealityCheck,
   isPresenterMode,
   onTogglePresenterMode,
+  userSuccessRate = 99.2,
+  userP95Ms = 410,
+  cumulativeMoneyLostInr = 0,
 }) => {
   return (
     <header className="h-14 bg-surface border-b border-border px-4 flex items-center justify-between gap-4 select-none flex-shrink-0 z-30 shadow-noc">
@@ -82,7 +88,8 @@ export const TopNav: React.FC<TopNavProps> = ({
             onChange={(e) => onSelectTemplate(e.target.value)}
             className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-3 pr-7 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent"
           >
-            <option value="shopfast">ShopFast (13 Services)</option>
+            <option value="shopfast">ShopFast (Naive - 13 Services)</option>
+            <option value="shopfast_hardened">ShopFast (Hardened Reference)</option>
             <option value="ridehailing">Ride-Hailing Fleet</option>
             <option value="streaming">Video Streaming Edge</option>
             <option value="payments">UPI / Payments Switch</option>
@@ -169,8 +176,18 @@ export const TopNav: React.FC<TopNavProps> = ({
       <div className="flex items-center gap-3">
         {/* SLO Pill */}
         <div className="hidden lg:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs">
-          <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse" />
-          <span className="font-mono font-medium text-text-primary">99.2%</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              userSuccessRate >= 99
+                ? 'bg-status-healthy animate-pulse'
+                : userSuccessRate >= 90
+                ? 'bg-status-degraded'
+                : 'bg-status-failing animate-ping'
+            }`}
+          />
+          <span className="font-mono font-medium text-text-primary tabular-nums">
+            {userSuccessRate.toFixed(1)}%
+          </span>
           <span className="text-[10px] text-text-muted">SLO</span>
         </div>
 
@@ -178,12 +195,24 @@ export const TopNav: React.FC<TopNavProps> = ({
         <div className="hidden xl:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs">
           <Activity className="w-3 h-3 text-accent" />
           <span className="text-text-muted text-[10px]">p95:</span>
-          <span className="font-mono font-medium text-text-primary">410ms</span>
+          <span
+            className={`font-mono font-medium tabular-nums ${
+              userP95Ms > 800 ? 'text-status-failing font-bold' : 'text-text-primary'
+            }`}
+          >
+            {Math.round(userP95Ms)}ms
+          </span>
         </div>
 
         {/* ₹ Lost Counter */}
         <div className="hidden md:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs font-mono">
-          <span className="text-status-failing font-bold">₹ 0</span>
+          <span
+            className={`font-bold tabular-nums ${
+              cumulativeMoneyLostInr > 0 ? 'text-status-failing' : 'text-text-muted'
+            }`}
+          >
+            ₹ {Math.round(cumulativeMoneyLostInr).toLocaleString('en-IN')}
+          </span>
           <span className="text-[10px] text-text-dim">lost</span>
         </div>
 
