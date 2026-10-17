@@ -411,7 +411,11 @@ export class SimulationEngine {
 
       // Instance kill fault
       if (svcMod.instanceReductionFraction > 0) {
-        activeReplicas = Math.max(1, Math.floor(activeReplicas * (1.0 - svcMod.instanceReductionFraction)));
+        if (svcMod.instanceReductionFraction >= 0.99) {
+          activeReplicas = 0;
+        } else {
+          activeReplicas = Math.max(1, Math.floor(activeReplicas * (1.0 - svcMod.instanceReductionFraction)));
+        }
       }
 
       // Instance restart logic

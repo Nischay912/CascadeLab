@@ -7,6 +7,7 @@ import { BottomTimeline } from './ui/BottomTimeline';
 import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
+import { analyzeSimulationIncident } from './analysis';
 
 export const App: React.FC = () => {
   const {
@@ -27,7 +28,6 @@ export const App: React.FC = () => {
     seed,
     history,
     currentMetrics,
-    originNodeId,
     selectedScenario,
     initializeSimulation,
     runSimulationBatch,
@@ -92,19 +92,10 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleRunning, resetSimulation, setSpeed]);
 
-  const [rootCause] = useState<any>({
-    origin: originNodeId || 'payment-provider',
-    pattern: 'retry_storm_cascade',
-    confidence: 0.94,
-    blastRadiusPct: 62,
-    isMetastable: true,
-    evidence: [
-      'Origin node payment-provider latency surged 5x at t=60s.',
-      'Amplification factor escalated from 1.0x to 4.7x via retries.',
-      'Gateway queue reached 100% capacity; worker exhaustion cascaded upstream.',
-      'System remained at 30% success 60s after trigger ended (Metastable).',
-    ],
-  });
+  // Dynamic Root Cause & Pattern Analysis Engine
+  const rootCause = useMemo(() => {
+    return analyzeSimulationIncident(currentSpec, history);
+  }, [currentSpec, history]);
 
   const handleRunLinter = () => {
     setIsAnalyzing(true);
