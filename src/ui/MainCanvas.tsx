@@ -12,6 +12,7 @@ import { ChaosMatrixView } from '../chaos/ChaosMatrixView';
 import { CapacityCliffView } from '../chaos/CapacityCliffView';
 import { SplitScreenReplayView } from '../optimizer/SplitScreenReplayView';
 import { ParetoFrontView } from '../optimizer/ParetoFrontView';
+import { RealityCheckView } from '../reality/RealityCheckView';
 
 interface MainCanvasProps {
   onSelectNode: (nodeId: string) => void;
@@ -85,17 +86,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
 
         {activeTab === 'capacity' && <CapacityCliffView />}
 
-        {activeTab === 'reality' && (
-          <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-text-muted">
-            <div className="w-16 h-16 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-status-healthy mb-4 shadow-noc">
-              <Layers className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-text-primary mb-2">Reality Check: Predicted vs Measured</h3>
-            <p className="text-xs text-text-muted max-w-md leading-relaxed">
-              Empirical overlay validating fluid queueing predictions against real running mini-stack metrics (success rate & p95 latency within ±15%).
-            </p>
-          </div>
-        )}
+        {activeTab === 'reality' && <RealityCheckView />}
       </div>
     </main>
   );
