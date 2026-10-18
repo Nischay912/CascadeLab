@@ -20,22 +20,34 @@ export interface FastSuiteReport {
 export function runFastResilienceSuite(spec: ArchitectureSpec): FastSuiteReport {
   const allScenarios = generateChaosScenarios(spec);
 
-  // Pick 5-6 highest-leverage representative scenarios:
-  // 3 system-wide faults + 3 critical service faults
-  const fastScenarios = allScenarios.filter((sc) => {
-    if (sc.id === 'system_traffic_3x' || sc.id === 'system_cache_flush' || sc.id === 'system_az_outage') {
-      return true;
-    }
-    if (sc.targetServiceId) {
-      if (sc.targetServiceId.includes('db') && sc.faultType === 'kill_100') return true;
-      if (sc.targetServiceId.includes('provider') && sc.faultType === 'latency_20x') return true;
-      if (sc.targetServiceId.includes('checkout') && sc.faultType === 'error_30') return true;
-    }
-    return false;
-  }).slice(0, 6);
+  // Pick high-leverage representative scenarios across this specific architecture:
+  // 1. System faults: traffic surge and AZ outage
+  const selected: typeof allScenarios = [];
+  const trafficSurge = allScenarios.find((s) => s.id === 'system_traffic_3x');
+  const azOutage = allScenarios.find((s) => s.id === 'system_az_outage');
+  if (trafficSurge) selected.push(trafficSurge);
+  if (azOutage) selected.push(azOutage);
 
-  // If fewer than 4 found (e.g. simple custom spec), take first 5 scenarios
-  const scenariosToRun = fastScenarios.length >= 4 ? fastScenarios : allScenarios.slice(0, 5);
+  // 2. Identify critical callee services (targets of sync critical edges)
+  const criticalTargets = new Set<string>();
+  spec.edges.forEach((e) => {
+    if (e.critical && e.mode === 'sync') criticalTargets.add(e.to);
+  });
+
+  // Pick latency_5x and error_30 on critical targets
+  for (const targetId of criticalTargets) {
+    const latFault = allScenarios.find((s) => s.targetServiceId === targetId && s.faultType === 'latency_5x');
+    if (latFault && selected.length < 8) selected.push(latFault);
+    const errFault = allScenarios.find((s) => s.targetServiceId === targetId && s.faultType === 'error_30');
+    if (errFault && selected.length < 8) selected.push(errFault);
+  }
+
+  // Fallback if needed
+  if (selected.length < 5) {
+    allScenarios.slice(0, 5 - selected.length).forEach((s) => selected.push(s));
+  }
+
+  const scenariosToRun = selected.slice(0, 6);
 
   let totalWeight = 0;
   let weightedScoreSum = 0;

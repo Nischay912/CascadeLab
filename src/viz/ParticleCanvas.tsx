@@ -105,8 +105,8 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
       const nodeMap = new Map<string, Node>();
       nodes.forEach((n) => nodeMap.set(n.id, n));
 
-      const NODE_WIDTH = 240;
-      const NODE_HEIGHT = 110;
+      const NODE_WIDTH = 295;
+      const NODE_HEIGHT = 145;
 
       // 1. Draw Expanding Failure Wave from Origin Node
       if (originNodeId) {

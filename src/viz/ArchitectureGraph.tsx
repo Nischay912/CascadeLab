@@ -54,8 +54,8 @@ const GraphCanvasInner: React.FC<{
     setNodes(layout.nodes as unknown as Node[]);
     setEdges(layout.edges as unknown as Edge[]);
     setTimeout(() => {
-      fitView({ padding: 0.2, duration: 400 });
-    }, 50);
+      fitView({ padding: 0.14, duration: 400 });
+    }, 60);
   }, [layout, fitView, setNodes, setEdges]);
 
   // Update node and edge metrics whenever simulation tick (currentMetrics) changes
@@ -69,21 +69,23 @@ const GraphCanvasInner: React.FC<{
         const svcSpec = (node.data as any)?.service;
         const initialReplicas = svcSpec?.instances?.initial ?? 4;
         const ownServiceTime = svcSpec?.service_time_ms ?? 10;
+        const baselineLatency = history[0]?.services[node.id]?.p95Ms ?? ownServiceTime;
 
         const activeInstances = svcMetrics?.instancesReady ?? initialReplicas;
         const crashedInstances = svcMetrics?.instancesCrashed ?? 0;
         const startingInstances = svcMetrics?.instancesStarting ?? 0;
         const rps = svcMetrics?.arrivalRate ?? 0;
-        const latencyMs = svcMetrics?.p95Ms ?? ownServiceTime;
+        const latencyMs = svcMetrics?.p95Ms ?? baselineLatency;
         const utilPct = (svcMetrics?.utilization ?? 0.2) * 100;
         const queue = svcMetrics?.queue ?? 0;
+        const successRate = svcMetrics?.successRate ?? 100;
 
         let status: 'healthy' | 'degraded' | 'failing' | 'crashed' | 'recovering' = 'healthy';
         if (activeInstances === 0) {
           status = 'crashed';
-        } else if (crashedInstances > 0 || queue > 40 || utilPct >= 95) {
+        } else if (crashedInstances > 0 || queue > 40 || utilPct >= 95 || successRate < 70) {
           status = 'failing';
-        } else if (utilPct >= 70 || latencyMs > ownServiceTime * 2.5) {
+        } else if (utilPct >= 80 || queue > 15 || successRate < 95 || (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 35))) {
           status = 'degraded';
         } else if (svcMetrics?.cooldownTimer && svcMetrics.cooldownTimer > 0) {
           status = 'recovering';
@@ -156,14 +158,24 @@ const GraphCanvasInner: React.FC<{
         minZoom={0.2}
         maxZoom={2}
         fitView
+        fitViewOptions={{ padding: 0.08 }}
         className="bg-background"
       >
         <Background color="#1A243D" gap={20} size={1.5} />
         <Controls className="!bg-surface-raised !border-border !fill-text-primary !shadow-noc [&>button]:!border-border [&>button]:!bg-surface [&>button]:!text-text-primary hover:[&>button]:!bg-surface-hover" />
         <MiniMap
-          nodeColor="#38BDF8"
+          nodeColor={(node: any) => {
+            const status = node.data?.metrics?.status;
+            if (status === 'failing') return '#EF4444';
+            if (status === 'crashed') return '#6B7280';
+            if (status === 'degraded') return '#F59E0B';
+            if (status === 'recovering') return '#3B82F6';
+            return '#10B981';
+          }}
           maskColor="rgba(11, 16, 32, 0.75)"
           className="!bg-surface !border !border-border !rounded-lg overflow-hidden !shadow-noc"
+          zoomable
+          pannable
         />
       </ReactFlow>
 
@@ -177,19 +189,19 @@ const GraphCanvasInner: React.FC<{
       />
 
       {/* Floating Architecture Info & Effect Toggle Pill */}
-      <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
-        <div className="bg-surface/90 backdrop-blur border border-border px-3 py-1.5 rounded-lg shadow-noc pointer-events-none flex items-center gap-2">
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+        <div className="bg-surface/90 backdrop-blur border border-border px-2.5 py-1 rounded-lg shadow-noc pointer-events-none flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse" />
           <span className="text-xs font-bold text-text-primary">{currentSpec.name}</span>
-          <span className="text-[10px] text-text-dim font-mono">
-            ({currentSpec.services.length} services, {currentSpec.edges.length} edges)
+          <span className="text-xs text-text-dim font-mono hidden xl:inline">
+            ({currentSpec.services.length} services)
           </span>
         </div>
 
-        {/* Visual Effects Toggle (Accessibility / prefers-reduced-motion) */}
+        {/* Visual Effects Toggle */}
         <button
           onClick={toggleEffects}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border backdrop-blur text-xs font-medium transition-all shadow-noc ${
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border backdrop-blur text-xs font-medium transition-all shadow-noc ${
             effectsEnabled
               ? 'bg-accent/20 border-accent/40 text-accent'
               : 'bg-surface/90 border-border text-text-muted hover:text-text-primary'
@@ -199,6 +211,22 @@ const GraphCanvasInner: React.FC<{
           <Sparkles className="w-3.5 h-3.5" />
           <span>{effectsEnabled ? 'Particles: ON' : 'Particles: OFF'}</span>
         </button>
+      </div>
+
+      {/* Bottom-left Legend */}
+      <div className="absolute bottom-4 left-14 flex items-center gap-3 bg-surface/90 backdrop-blur border border-border px-3 py-1.5 rounded-lg shadow-noc text-xs z-10 font-mono">
+        <span className="flex items-center gap-1.5 text-text-primary">
+          <span className="w-2.5 h-2.5 rounded-full bg-status-healthy" /> Healthy
+        </span>
+        <span className="flex items-center gap-1.5 text-text-primary">
+          <span className="w-2.5 h-2.5 rounded-full bg-traffic-retry" /> Retry Wave
+        </span>
+        <span className="flex items-center gap-1.5 text-text-primary">
+          <span className="w-2.5 h-2.5 rounded-full bg-status-degraded" /> Degraded
+        </span>
+        <span className="flex items-center gap-1.5 text-text-primary">
+          <span className="w-2.5 h-2.5 rounded-full bg-status-failing" /> Failing / Down
+        </span>
       </div>
     </div>
   );
@@ -276,36 +304,38 @@ services:
       </ReactFlowProvider>
 
       {/* Floating Toolbar: Import, Export, Share */}
-      <div className="absolute top-4 right-4 flex items-center gap-1.5 z-10">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
         <button
           onClick={() => {
             setInputText(sampleDockerCompose);
             setImportError(null);
             setModalMode('import');
           }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
+          className="flex items-center gap-1 px-2 py-1 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
           title="Import from docker-compose.yml, YAML, or JSON"
         >
-          <Upload className="w-3.5 h-3.5 text-accent" />
+          <Upload className="w-3 h-3 text-accent" />
           <span>Import</span>
         </button>
 
         <button
           onClick={handleOpenExport}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
+          className="flex items-center gap-1 px-2 py-1 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
           title="Export architecture as YAML"
         >
-          <Download className="w-3.5 h-3.5 text-accent" />
-          <span>Export YAML</span>
+          <Download className="w-3 h-3 text-accent" />
+          <span className="hidden xl:inline">Export YAML</span>
+          <span className="xl:hidden">Export</span>
         </button>
 
         <button
           onClick={handleOpenShare}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-xs font-medium text-accent rounded-md shadow-noc transition-colors"
+          className="flex items-center gap-1 px-2 py-1 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-xs font-medium text-accent rounded-md shadow-noc transition-colors"
           title="Share architecture via compressed URL"
         >
-          <Share2 className="w-3.5 h-3.5" />
-          <span>Share URL</span>
+          <Share2 className="w-3 h-3" />
+          <span className="hidden xl:inline">Share URL</span>
+          <span className="xl:hidden">Share</span>
         </button>
       </div>
 

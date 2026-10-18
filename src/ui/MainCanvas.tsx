@@ -29,22 +29,22 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
   >('graph');
 
   return (
-    <main className="flex-1 flex flex-col h-full bg-background relative overflow-hidden select-none">
+    <main className="flex-1 min-w-0 flex flex-col h-full bg-background relative overflow-hidden select-none">
       {/* Top Canvas Tabs */}
-      <div className="h-10 bg-surface/80 backdrop-blur border-b border-border px-4 flex items-center justify-between z-10">
-        <div className="flex items-center gap-1">
+      <div className="h-10 bg-surface/80 backdrop-blur border-b border-border px-3 flex items-center justify-between z-10 overflow-x-auto">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {[
             { id: 'graph', label: 'Architecture Graph', icon: Network },
-            { id: 'split', label: 'Split-Screen Replay', icon: Columns2 },
-            { id: 'optimizer', label: 'Auto-Harden (Pareto)', icon: Sparkles },
+            { id: 'split', label: 'Split-Screen', icon: Columns2 },
+            { id: 'optimizer', label: 'Auto-Harden', icon: Sparkles },
             { id: 'chaos', label: 'Chaos Matrix', icon: Grid },
             { id: 'capacity', label: 'Capacity Cliff', icon: TrendingDown },
-            { id: 'reality', label: 'Reality Check', icon: Layers },
+            { id: 'reality', label: 'Model Consistency', icon: Layers },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-t transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-t transition-all ${
                 activeTab === tab.id
                   ? 'bg-surface-raised text-accent border-b-2 border-accent'
                   : 'text-text-muted hover:text-text-primary hover:bg-surface-hover/50'
@@ -54,18 +54,6 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
               <span>{tab.label}</span>
             </button>
           ))}
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] text-text-dim">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-status-healthy" /> Healthy
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-traffic-retry" /> Retry Wave
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-status-failing" /> Failing
-          </span>
         </div>
       </div>
 

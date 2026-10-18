@@ -408,19 +408,31 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
       return {
         ...svc,
         instances: { initial: 6, min: 4, max: 14 },
-        load_shedding: { enabled: true, threshold: 0.8 },
+        load_shedding: { enabled: true, threshold: 0.85 },
       };
     }
     if (svc.id === 'checkout') {
       return {
         ...svc,
         instances: { initial: 5, min: 4, max: 12 },
+        concurrency: 25,
+        queue_limit: 250,
+        autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 20, cooldown_s: 60 },
+      };
+    }
+    if (svc.id === 'payments') {
+      return {
+        ...svc,
+        instances: { initial: 4, min: 3, max: 10 },
+        load_shedding: { enabled: true, threshold: 0.85 },
+        autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 20, cooldown_s: 60 },
       };
     }
     if (svc.id === 'orders-db') {
       return {
         ...svc,
-        instances: { initial: 2, min: 2, max: 4 }, // Fixed SPOF
+        instances: { initial: 2, min: 2, max: 6 }, // Fixed SPOF
+        concurrency: 30,
         zone_spread: ['a', 'b'],
       };
     }
@@ -437,12 +449,14 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
           }
         : edge.backoff;
 
+    const cappedRetries = Math.min(1, edge.retries);
+
     if (edge.from === 'gateway' && edge.to === 'checkout') {
       return {
         ...edge,
         retries: 0,
         backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 100, max_delay_ms: 1000 },
-        circuit_breaker: { enabled: true, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
+        circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       };
     }
     if (edge.from === 'checkout' && edge.to === 'payments') {
@@ -450,7 +464,7 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
         ...edge,
         retries: 1,
         backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 100, max_delay_ms: 1500 },
-        circuit_breaker: { enabled: true, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
+        circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       };
     }
     if (edge.from === 'payments' && edge.to === 'payment-provider') {
@@ -458,17 +472,18 @@ export const shopFastHardenedTemplate: ArchitectureSpec = {
         ...edge,
         retries: 1,
         backoff: { mode: 'exponential' as const, jitter: true, base_delay_ms: 150, max_delay_ms: 2000 },
-        circuit_breaker: { enabled: true, failure_rate_threshold: 0.4, min_calls: 10, open_duration_s: 20, probe_fraction: 0.05 },
+        circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 20, probe_fraction: 0.05 },
       };
     }
     return {
       ...edge,
+      retries: cappedRetries,
       backoff: baseBackoff,
       circuit_breaker:
         edge.critical && edge.mode === 'sync'
           ? {
               enabled: true,
-              failure_rate_threshold: 0.5,
+              failure_rate_threshold: 0.35,
               min_calls: 10,
               open_duration_s: 15,
               probe_fraction: 0.1,
@@ -491,10 +506,10 @@ export const rideHailingTemplate: ArchitectureSpec = {
       id: 'driver-gateway',
       name: 'Driver Gateway',
       entry: true,
-      instances: { initial: 4, min: 4, max: 12 },
-      concurrency: 80,
-      service_time_ms: 4,
-      queue_limit: 300,
+      instances: { initial: 3, min: 2, max: 8 },
+      concurrency: 30,
+      service_time_ms: 8,
+      queue_limit: 150,
       load_shedding: { enabled: false, threshold: 0.85 },
       autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 30, cooldown_s: 90 },
       crash: { enabled: true, after_overload_s: 20, restart_delay_s: 25 },
@@ -504,28 +519,28 @@ export const rideHailingTemplate: ArchitectureSpec = {
     {
       id: 'location-ingest',
       name: 'Location Ingestion',
-      instances: { initial: 5, min: 4, max: 15 },
-      concurrency: 100,
-      service_time_ms: 6,
-      queue_limit: 500,
-      load_shedding: { enabled: true, threshold: 0.9 },
+      instances: { initial: 1, min: 1, max: 2 },
+      concurrency: 30,
+      service_time_ms: 25,
+      queue_limit: 100,
+      load_shedding: { enabled: false, threshold: 0.8 },
       autoscale: { enabled: true, target_util: 0.7, eval_period_s: 10, startup_delay_s: 30, cooldown_s: 90 },
       crash: { enabled: true, after_overload_s: 15, restart_delay_s: 20 },
       cost_inr_per_instance_month: 2500,
-      zone_spread: ['a', 'b'],
+      zone_spread: ['a'],
     },
     {
       id: 'h3-spatial-index',
       name: 'Spatial Geospatial Grid',
-      instances: { initial: 3, min: 2, max: 6 },
-      concurrency: 60,
-      service_time_ms: 12,
-      queue_limit: 200,
+      instances: { initial: 1, min: 1, max: 2 },
+      concurrency: 25,
+      service_time_ms: 20,
+      queue_limit: 100,
       load_shedding: { enabled: false, threshold: 0.8 },
       autoscale: { enabled: true, target_util: 0.6, eval_period_s: 15, startup_delay_s: 40, cooldown_s: 120 },
       crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 },
-      cost_inr_per_instance_month: 4500,
-      zone_spread: ['a', 'b'],
+      cost_inr_per_instance_month: 2500,
+      zone_spread: ['a'],
     },
     {
       id: 'matcher-engine',
@@ -576,8 +591,8 @@ export const rideHailingTemplate: ArchitectureSpec = {
       mode: 'sync',
       critical: true,
       timeout_ms: 200,
-      retries: 1,
-      backoff: { mode: 'none', jitter: false, base_delay_ms: 50, max_delay_ms: 200 },
+      retries: 3,
+      backoff: { mode: 'none', jitter: false, base_delay_ms: 50, max_delay_ms: 300 },
       circuit_breaker: { enabled: false, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       cache: { hit_ratio: 0.0, warm_time_s: 30 },
       bulkhead_max_concurrent: null,
@@ -590,7 +605,7 @@ export const rideHailingTemplate: ArchitectureSpec = {
       mode: 'sync',
       critical: true,
       timeout_ms: 300,
-      retries: 1,
+      retries: 3,
       backoff: { mode: 'none', jitter: false, base_delay_ms: 50, max_delay_ms: 300 },
       circuit_breaker: { enabled: false, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       cache: { hit_ratio: 0.0, warm_time_s: 30 },
@@ -641,11 +656,11 @@ export const rideHailingTemplate: ArchitectureSpec = {
   ],
   workload: {
     entry: 'driver-gateway',
-    pattern: 'ramp',
-    base_rps: 800,
-    multiplier: 2.5,
+    pattern: 'flash_sale',
+    base_rps: 400,
+    multiplier: 3.0,
     duration_s: 180,
-    ramp_time_s: 45,
+    ramp_time_s: 25,
   },
   faults: [],
   seed: 101,
@@ -942,28 +957,28 @@ export const quickCommerceTemplate: ArchitectureSpec = {
     {
       id: 'dark-store-picker',
       name: 'Dark Store Realtime Stock',
-      instances: { initial: 3, min: 2, max: 8 },
-      concurrency: 40,
-      service_time_ms: 22,
-      queue_limit: 150,
+      instances: { initial: 1, min: 1, max: 2 },
+      concurrency: 25,
+      service_time_ms: 35,
+      queue_limit: 100,
       load_shedding: { enabled: false, threshold: 0.8 },
       autoscale: { enabled: true, target_util: 0.6, eval_period_s: 15, startup_delay_s: 40, cooldown_s: 100 },
       crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 },
       cost_inr_per_instance_month: 3000,
-      zone_spread: ['a', 'b'],
+      zone_spread: ['a'],
     },
     {
       id: 'rider-allocation',
       name: 'Rider Allocation Engine',
-      instances: { initial: 3, min: 2, max: 8 },
-      concurrency: 30,
-      service_time_ms: 38,
-      queue_limit: 150,
+      instances: { initial: 1, min: 1, max: 2 },
+      concurrency: 20,
+      service_time_ms: 45,
+      queue_limit: 80,
       load_shedding: { enabled: false, threshold: 0.8 },
       autoscale: { enabled: true, target_util: 0.6, eval_period_s: 15, startup_delay_s: 45, cooldown_s: 120 },
       crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 },
       cost_inr_per_instance_month: 3500,
-      zone_spread: ['a', 'b'],
+      zone_spread: ['a'],
     },
     {
       id: 'qc-checkout',
@@ -988,7 +1003,7 @@ export const quickCommerceTemplate: ArchitectureSpec = {
       mode: 'sync',
       critical: true,
       timeout_ms: 400,
-      retries: 1,
+      retries: 3,
       backoff: { mode: 'none', jitter: false, base_delay_ms: 50, max_delay_ms: 400 },
       circuit_breaker: { enabled: false, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       cache: { hit_ratio: 0.0, warm_time_s: 30 },
@@ -1016,7 +1031,7 @@ export const quickCommerceTemplate: ArchitectureSpec = {
       mode: 'sync',
       critical: true,
       timeout_ms: 600,
-      retries: 2,
+      retries: 3,
       backoff: { mode: 'none', jitter: false, base_delay_ms: 50, max_delay_ms: 600 },
       circuit_breaker: { enabled: false, failure_rate_threshold: 0.5, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 },
       cache: { hit_ratio: 0.0, warm_time_s: 30 },
@@ -1026,8 +1041,8 @@ export const quickCommerceTemplate: ArchitectureSpec = {
   workload: {
     entry: 'qc-gateway',
     pattern: 'flash_sale',
-    base_rps: 500,
-    multiplier: 3.5,
+    base_rps: 400,
+    multiplier: 3.0,
     duration_s: 180,
     ramp_time_s: 25,
   },

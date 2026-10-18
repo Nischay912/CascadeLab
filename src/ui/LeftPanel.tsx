@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   Info,
   Layers,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useArchitectureStore } from '../state/useArchitectureStore';
 
@@ -21,6 +23,8 @@ interface LeftPanelProps {
   onSetWorkload: (workloadType: string) => void;
   onOpenBreakIt: () => void;
   onOpenDefendIt: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -28,6 +32,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onSetWorkload,
   onOpenBreakIt,
   onOpenDefendIt,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'inspector'>('library');
   const {
@@ -48,10 +54,56 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       ? currentSpec.edges.find((e) => e.id === selectedElementId || `${e.from}->${e.to}` === selectedElementId)
       : null;
 
+  if (isCollapsed) {
+    return (
+      <aside className="w-12 bg-surface border-r border-border flex flex-col items-center py-2 select-none flex-shrink-0 z-20">
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-raised rounded transition-colors mb-3"
+          title="Expand Controls & Inspector Panel"
+        >
+          <ChevronRight className="w-4 h-4 text-accent" />
+        </button>
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-raised rounded transition-colors mb-2"
+          title="Library & Workloads"
+        >
+          <FolderKanban className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 text-text-muted hover:text-text-primary hover:bg-surface-raised rounded transition-colors mb-2 relative"
+          title="Inspector"
+        >
+          <Sliders className="w-4 h-4" />
+          {(selectedService || selectedEdge) && (
+            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse absolute top-1 right-1" />
+          )}
+        </button>
+        <div className="w-6 h-px bg-border my-2" />
+        <button
+          onClick={onOpenBreakIt}
+          className="p-2 text-status-failing hover:bg-status-failing/20 rounded transition-colors mb-2"
+          title="Break-It Chaos Console"
+        >
+          <Flame className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onOpenDefendIt}
+          className="p-2 text-accent hover:bg-accent/20 rounded transition-colors"
+          title="Defend-It Optimizer Console"
+        >
+          <ShieldCheck className="w-4 h-4" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-80 bg-surface border-r border-border flex flex-col h-full select-none flex-shrink-0 z-20">
       {/* Panel Tab Switcher */}
-      <div className="flex border-b border-border bg-surface-raised/50">
+      <div className="flex border-b border-border bg-surface-raised/50 items-center">
         <button
           onClick={() => setActiveTab('library')}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
@@ -77,6 +129,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           )}
         </button>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="px-2.5 py-2.5 text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-l border-border"
+            title="Collapse Panel"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Tab Content */}

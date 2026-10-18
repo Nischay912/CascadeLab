@@ -43,10 +43,10 @@ export function computeGraphLayout(
 ): LayoutResult {
   const {
     rankdir = 'LR',
-    nodeWidth = 240,
-    nodeHeight = 110,
-    ranksep = 110,
-    nodesep = 50,
+    nodeWidth = 260,
+    nodeHeight = 92,
+    ranksep = 55,
+    nodesep = 12,
   } = options;
 
   const dagreGraph = new dagre.graphlib.Graph();
@@ -55,8 +55,8 @@ export function computeGraphLayout(
     rankdir,
     ranksep,
     nodesep,
-    marginx: 50,
-    marginy: 50,
+    marginx: 20,
+    marginy: 45,
   });
 
   // Add nodes to dagre

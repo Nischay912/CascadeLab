@@ -8,6 +8,7 @@ import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
 import { analyzeSimulationIncident } from './analysis';
+import { evaluateFastResilienceScore } from './optimizer/fastSuite';
 import { BreakItModal, DefendItModal, DemoDirectorOverlay } from './demo';
 import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
 
@@ -48,6 +49,9 @@ export const App: React.FC = () => {
   const [isDirectorOpen, setIsDirectorOpen] = useState(false);
   const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
   const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 1440 : false
+  );
 
   // Compute live architecture lint report
   const lintReport = useMemo(() => runLinter(currentSpec), [currentSpec]);
@@ -109,10 +113,25 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleRunning, resetSimulation, setSpeed, loadTemplate]);
 
+  // Headline Chaos Suite Resilience Score for the top bar
+  const chaosResilienceScore = useMemo(() => {
+    return evaluateFastResilienceScore(currentSpec);
+  }, [currentSpec]);
+
   // Dynamic Root Cause & Pattern Analysis Engine
   const rootCause = useMemo(() => {
-    return analyzeSimulationIncident(currentSpec, history);
-  }, [currentSpec, history]);
+    const hasActiveFault = currentMetrics?.activeFaults && currentMetrics.activeFaults.length > 0;
+    const hasDegradation = currentMetrics && currentMetrics.userSuccessRate < 98;
+    const isPastFaultStart = currentSpec.faults.some((f) => currentTime >= f.start_s);
+
+    if (!hasActiveFault && !hasDegradation && !isPastFaultStart) {
+      return null;
+    }
+
+    const historyUpToNow = history.slice(0, currentTime + 1);
+    if (historyUpToNow.length === 0) return null;
+    return analyzeSimulationIncident(currentSpec, historyUpToNow);
+  }, [currentSpec, history, currentTime, currentMetrics]);
 
   const handleRunLinter = () => {
     setIsAnalyzing(true);
@@ -159,7 +178,7 @@ export const App: React.FC = () => {
         onSelectTemplate={(tpl) => loadTemplate(tpl)}
         selectedScenario={selectedScenario}
         onSelectScenario={handleScenarioChange}
-        resilienceScore={resilienceScore}
+        resilienceScore={chaosResilienceScore}
         onAutoHarden={handleAutoHarden}
         onOpenBreakIt={() => setIsBreakItOpen(true)}
         onOpenPostmortem={() => {
@@ -182,6 +201,8 @@ export const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {!isPresenterMode && (
           <LeftPanel
+            isCollapsed={isLeftPanelCollapsed}
+            onToggleCollapse={() => setIsLeftPanelCollapsed((prev) => !prev)}
             onInjectFault={(f) => {
               addFault({
                 type: f as any,
@@ -217,6 +238,7 @@ export const App: React.FC = () => {
             onRunLinter={handleRunLinter}
             onApplyFix={handleApplyFix}
             isAnalyzing={isAnalyzing}
+            designScore={lintReport.staticResilienceScore}
           />
         )}
       </div>

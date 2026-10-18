@@ -34,7 +34,7 @@ export function runLinter(spec: ArchitectureSpec): LintReport {
   // Calculate static resilience penalty:
   // Starts at 100, deducts 8 per critical, 3 per warning, 1 per info
   const penalty = criticalCount * 8 + warningCount * 3 + infoCount * 1;
-  const staticResilienceScore = Math.max(20, Math.min(100, 100 - penalty));
+  const staticResilienceScore = Math.max(0, Math.min(100, 100 - penalty));
 
   return {
     findings: allFindings,

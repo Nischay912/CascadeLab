@@ -191,5 +191,109 @@ export function generateCandidateActions(spec: ArchitectureSpec): CandidateActio
     }
   }
 
+  // 6. Systematic Retry Reduction on edges with retries >= 2
+  for (const edge of spec.edges) {
+    const edgeKey = edge.id || `${edge.from}->${edge.to}`;
+    if (edge.retries >= 2) {
+      const candidateId = `reduce-retries-${edgeKey}`;
+      if (!seenIds.has(candidateId)) {
+        seenIds.add(candidateId);
+        const applyFn = (orig: ArchitectureSpec) => {
+          const cloned = cloneSpec(orig);
+          const target = cloned.edges.find((e) => (e.id || `${e.from}->${e.to}`) === edgeKey);
+          if (target) {
+            target.retries = 1;
+            target.backoff = {
+              mode: 'exponential',
+              jitter: true,
+              base_delay_ms: Math.max(50, target.backoff?.base_delay_ms || 50),
+              max_delay_ms: Math.max(1000, target.backoff?.max_delay_ms || 1000),
+            };
+          }
+          return cloned;
+        };
+
+        candidates.push({
+          id: candidateId,
+          title: `Cap Retries on ${edge.from} → ${edge.to} to 1 (Bounded Retry Budget)`,
+          category: 'retry_backoff',
+          targetType: 'edge',
+          targetId: edgeKey,
+          description: `Limits downstream retry amplification factor from ${edge.retries + 1}× to 2× maximum.`,
+          costDeltaInr: 0,
+          apply: applyFn,
+        });
+      }
+    }
+  }
+
+  // 7. Systematic Service Hardening: Adaptive Load Shedding on Services with Queue Limits
+  for (const svc of spec.services) {
+    if (!svc.load_shedding?.enabled && svc.queue_limit > 50) {
+      const candidateId = `shedding-service-${svc.id}`;
+      if (!seenIds.has(candidateId)) {
+        seenIds.add(candidateId);
+        const applyFn = (orig: ArchitectureSpec) => {
+          const cloned = cloneSpec(orig);
+          const target = cloned.services.find((s) => s.id === svc.id);
+          if (target) {
+            target.load_shedding = {
+              enabled: true,
+              threshold: 0.85,
+            };
+          }
+          return cloned;
+        };
+
+        candidates.push({
+          id: candidateId,
+          title: `Enable Adaptive Load Shedding on ${svc.name || svc.id}`,
+          category: 'load_shedding',
+          targetType: 'service',
+          targetId: svc.id,
+          description: `Protects ${svc.name || svc.id} from queue exhaustion crashes under overload.`,
+          costDeltaInr: 0,
+          apply: applyFn,
+        });
+      }
+    }
+  }
+
+  // 8. Horizontal Autoscaling for Bottleneck Services
+  for (const svc of spec.services) {
+    if (!svc.autoscale?.enabled && svc.crash?.enabled) {
+      const candidateId = `autoscale-enable-${svc.id}`;
+      if (!seenIds.has(candidateId)) {
+        seenIds.add(candidateId);
+        const applyFn = (orig: ArchitectureSpec) => {
+          const cloned = cloneSpec(orig);
+          const target = cloned.services.find((s) => s.id === svc.id);
+          if (target) {
+            target.autoscale = {
+              enabled: true,
+              target_util: 0.65,
+              eval_period_s: 15,
+              startup_delay_s: 30,
+              cooldown_s: 90,
+            };
+            target.instances.max = Math.max(target.instances.initial * 2, target.instances.max || 8);
+          }
+          return cloned;
+        };
+
+        candidates.push({
+          id: candidateId,
+          title: `Enable Autoscaling on ${svc.name || svc.id}`,
+          category: 'replica_scale',
+          targetType: 'service',
+          targetId: svc.id,
+          description: `Allows dynamic scale-up under surge to avoid saturation collapse.`,
+          costDeltaInr: 0,
+          apply: applyFn,
+        });
+      }
+    }
+  }
+
   return candidates;
 }

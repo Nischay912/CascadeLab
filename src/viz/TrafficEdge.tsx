@@ -84,6 +84,15 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
     ? '#22D3EE'
     : '#1F2A44';
 
+  // Show edge labels only on selection, active circuit breaker, retry storm, or high throughput
+  const showLabel =
+    selected ||
+    isBreakerOpen ||
+    isBreakerHalfOpen ||
+    metrics.effectiveRps >= 1000 ||
+    metrics.retryAttempts > 1.3 ||
+    metrics.attemptFailureFraction > 0.15;
+
   return (
     <>
       <BaseEdge
@@ -97,79 +106,78 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
         }}
       />
 
-      {/* Edge pill label renderer */}
-      <EdgeLabelRenderer>
-        <div
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-            pointerEvents: 'all',
-          }}
-          className={`flex items-center gap-1.5 backdrop-blur border px-2 py-0.5 rounded text-[9px] font-mono shadow-sm cursor-pointer transition-all ${
-            selected
-              ? 'border-accent bg-surface-raised ring-1 ring-accent/30'
-              : isBreakerOpen
-              ? 'border-status-failing/60 bg-status-failing/20 text-status-failing'
-              : isRetryStorm
-              ? 'border-orange-500/40 bg-surface-raised text-orange-400'
-              : 'border-border bg-surface-raised/90 hover:border-accent text-text-primary'
-          }`}
-          title={`${edgeSpec.from} → ${edgeSpec.to} | Mode: ${edgeSpec.mode} | Timeout: ${edgeSpec.timeout_ms}ms | Load: ${Math.round(metrics.effectiveRps)} RPS`}
-        >
-          {/* Circuit Breaker status badge */}
-          {isBreakerOpen ? (
-            <span className="flex items-center gap-0.5 text-status-failing font-bold animate-pulse">
-              <ShieldAlert className="w-3 h-3" />
-              <span>CB: OPEN ({metrics.circuitBreakerTimer}s)</span>
-            </span>
-          ) : isBreakerHalfOpen ? (
-            <span className="flex items-center gap-0.5 text-status-degraded font-bold">
-              <ShieldAlert className="w-3 h-3" />
-              <span>CB: HALF-OPEN</span>
-            </span>
-          ) : edgeSpec.circuit_breaker?.enabled ? (
-            <span title="Circuit Breaker Armed (Closed)">
-              <ShieldCheck className="w-2.5 h-2.5 text-status-healthy" />
-            </span>
-          ) : edgeSpec.critical && edgeSpec.retries > 1 ? (
-            <span title="Unprotected Critical Dependency (No Breaker)">
-              <AlertCircle className="w-2.5 h-2.5 text-orange-400" />
-            </span>
-          ) : null}
+      {/* Edge pill label renderer (>= 12px font, non-overlapping) */}
+      {showLabel && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+            }}
+            className={`flex items-center gap-1.5 backdrop-blur border px-2.5 py-1 rounded-md text-xs font-mono shadow-md cursor-pointer transition-all ${
+              selected
+                ? 'border-accent bg-surface-raised ring-2 ring-accent/40 z-30'
+                : isBreakerOpen
+                ? 'border-status-failing/80 bg-status-failing/20 text-status-failing z-20'
+                : isRetryStorm
+                ? 'border-orange-500/60 bg-surface-raised text-orange-400 z-10'
+                : 'border-border bg-surface-raised/95 hover:border-accent text-text-primary'
+            }`}
+            title={`${edgeSpec.from} → ${edgeSpec.to} | Mode: ${edgeSpec.mode} | Timeout: ${edgeSpec.timeout_ms}ms | Load: ${Math.round(metrics.effectiveRps)} RPS`}
+          >
+            {/* Circuit Breaker status badge */}
+            {isBreakerOpen ? (
+              <span className="flex items-center gap-1 text-status-failing font-bold animate-pulse">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>CB: OPEN ({metrics.circuitBreakerTimer}s)</span>
+              </span>
+            ) : isBreakerHalfOpen ? (
+              <span className="flex items-center gap-1 text-status-degraded font-bold">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>CB: HALF-OPEN</span>
+              </span>
+            ) : edgeSpec.circuit_breaker?.enabled ? (
+              <span title="Circuit Breaker Armed (Closed)">
+                <ShieldCheck className="w-3.5 h-3.5 text-status-healthy" />
+              </span>
+            ) : edgeSpec.critical && edgeSpec.retries > 1 ? (
+              <span title="Unprotected Critical Dependency (No Breaker)">
+                <AlertCircle className="w-3.5 h-3.5 text-orange-400" />
+              </span>
+            ) : null}
 
-          {/* Retry multiplier */}
-          {metrics.retryAttempts > 1.1 ? (
-            <span
-              className="flex items-center gap-0.5 text-orange-400 font-bold"
-              title={`${metrics.retryAttempts.toFixed(2)}x retry multiplier`}
-            >
-              <RotateCw className="w-2.5 h-2.5" />
-              <span>{metrics.retryAttempts.toFixed(1)}×</span>
-            </span>
-          ) : edgeSpec.retries > 0 ? (
-            <span className="text-text-muted" title={`Configured retries: ${edgeSpec.retries}`}>
-              r:{edgeSpec.retries}
-            </span>
-          ) : null}
+            {/* Retry multiplier */}
+            {metrics.retryAttempts > 1.1 ? (
+              <span
+                className="flex items-center gap-1 text-orange-400 font-bold"
+                title={`${metrics.retryAttempts.toFixed(2)}x retry multiplier`}
+              >
+                <RotateCw className="w-3 h-3" />
+                <span>{metrics.retryAttempts.toFixed(1)}×</span>
+              </span>
+            ) : edgeSpec.retries > 0 ? (
+              <span className="text-text-muted" title={`Configured retries: ${edgeSpec.retries}`}>
+                r:{edgeSpec.retries}
+              </span>
+            ) : null}
 
-          {/* Failure rate percentage */}
-          {metrics.attemptFailureFraction > 0.05 && (
-            <span className="text-status-failing font-bold">
-              {Math.round(metrics.attemptFailureFraction * 100)}% fail
-            </span>
-          )}
+            {/* Failure rate percentage */}
+            {metrics.attemptFailureFraction > 0.05 && (
+              <span className="text-status-failing font-bold">
+                {Math.round(metrics.attemptFailureFraction * 100)}% fail
+              </span>
+            )}
 
-          {/* Throughput */}
-          {metrics.effectiveRps > 0 && (
-            <span className="text-text-dim tabular-nums">
-              {Math.round(metrics.effectiveRps)} RPS
-            </span>
-          )}
-
-          {/* Timeout */}
-          <span className="text-text-muted text-[8px]">{edgeSpec.timeout_ms}ms</span>
-        </div>
-      </EdgeLabelRenderer>
+            {/* Throughput */}
+            {metrics.effectiveRps > 0 && (
+              <span className="text-text-primary font-bold tabular-nums">
+                {Math.round(metrics.effectiveRps)} RPS
+              </span>
+            )}
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
 };

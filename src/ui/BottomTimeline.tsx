@@ -53,11 +53,14 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
   const internalRps = currentMetrics?.totalInternalRps ?? 600;
   const activeInstances = currentMetrics?.activeInstances ?? 36;
   const crashedInstances = currentMetrics?.crashedInstances ?? 0;
-  const amplification = currentMetrics?.amplification
-    ? currentMetrics.amplification.toFixed(1)
-    : externalRps > 0
-    ? (internalRps / externalRps).toFixed(1)
-    : '1.0';
+  const baselineEntryRps = history[0]?.entryRps || 600;
+  const baselineInternalRps = history[0]?.totalInternalRps || 2500;
+  const baselineFanout = baselineEntryRps > 0 ? baselineInternalRps / baselineEntryRps : 4.2;
+
+  // Retry Amplification = internal load / baseline internal load for the same workload (~1.0x when healthy)
+  const expectedNominalInternalRps = externalRps * baselineFanout;
+  const retryAmplificationNum = expectedNominalInternalRps > 0 ? internalRps / expectedNominalInternalRps : 1.0;
+  const retryAmplification = retryAmplificationNum.toFixed(1);
 
   // Compute default event markers from history if not supplied
   const effectiveMarkers: EventMarker[] = markers || [
@@ -306,24 +309,27 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           <Activity className="w-4 h-4 ml-2 flex-shrink-0 text-accent" />
         </div>
 
-        {/* Metric 3: RPS & Retry Amplification */}
-        <div className="bg-surface-raised/60 border border-border/80 rounded-md p-1.5 px-3 flex items-center justify-between">
+        {/* Metric 3: Retry Amplification & Baseline Fan-out */}
+        <div
+          className="bg-surface-raised/60 border border-border/80 rounded-md p-1.5 px-3 flex items-center justify-between"
+          title={`Retry Amplification = internal load / baseline internal load for the same workload (1.0× when healthy).\nBaseline Architectural Fan-out = ${baselineFanout.toFixed(1)}×.`}
+        >
           <div className="flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider font-medium">Amplification</span>
+              <span className="text-[10px] text-text-muted uppercase tracking-wider font-medium">Retry Amplification</span>
               <span
                 className={`text-[9px] font-mono px-1 rounded font-bold ${
-                  Number(amplification) > 1.4
+                  retryAmplificationNum > 1.3
                     ? 'bg-orange-500/20 text-orange-400'
                     : 'bg-accent/10 text-accent'
                 }`}
               >
-                {amplification}×
+                {retryAmplification}×
               </span>
             </div>
             <div className="text-xs font-mono text-text-primary tabular-nums">
-              {Math.round(externalRps)} <span className="text-text-dim text-[10px]">ext</span> / {Math.round(internalRps)}{' '}
-              <span className="text-text-dim text-[10px]">internal</span>
+              {Math.round(internalRps)} <span className="text-text-dim text-[10px]">internal</span>
+              <span className="text-text-dim text-[10px] ml-1.5">(fan-out: {baselineFanout.toFixed(1)}×)</span>
             </div>
           </div>
           {/* Sparkline */}
@@ -332,14 +338,14 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
               <path
                 d={rpsPath}
                 fill="none"
-                stroke={Number(amplification) > 1.4 ? '#FB923C' : '#38BDF8'}
+                stroke={retryAmplificationNum > 1.3 ? '#FB923C' : '#38BDF8'}
                 strokeWidth="1.5"
               />
             </svg>
           </div>
           <Flame
             className={`w-4 h-4 ml-2 flex-shrink-0 ${
-              Number(amplification) > 1.4 ? 'text-orange-400 animate-pulse' : 'text-text-dim'
+              retryAmplificationNum > 1.3 ? 'text-orange-400 animate-pulse' : 'text-text-dim'
             }`}
           />
         </div>

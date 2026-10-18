@@ -50,7 +50,6 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
     queue: 0,
     status: 'healthy',
     isOrigin: false,
-    sparkline: [20, 22, 21, 24, 20, 23, 21, 22],
   };
 
   // Select appropriate icon
@@ -71,40 +70,40 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
       case 'failing':
         return {
           color: '#F87171',
-          bg: 'bg-status-failing/15',
-          border: 'border-status-failing/40',
+          bg: 'bg-status-failing/20',
+          border: 'border-status-failing/60',
           text: 'FAILING',
           icon: Flame,
         };
       case 'crashed':
         return {
-          color: '#6B7280',
-          bg: 'bg-status-down/20',
-          border: 'border-status-down/50',
+          color: '#9CA3AF',
+          bg: 'bg-status-down/30',
+          border: 'border-status-down/60',
           text: 'DOWN',
           icon: XCircle,
         };
       case 'degraded':
         return {
           color: '#FBBF24',
-          bg: 'bg-status-degraded/15',
-          border: 'border-status-degraded/40',
+          bg: 'bg-status-degraded/20',
+          border: 'border-status-degraded/60',
           text: 'DEGRADED',
           icon: AlertTriangle,
         };
       case 'recovering':
         return {
           color: '#60A5FA',
-          bg: 'bg-status-recovering/15',
-          border: 'border-status-recovering/40',
+          bg: 'bg-status-recovering/20',
+          border: 'border-status-recovering/60',
           text: 'RECOVERING',
           icon: RotateCw,
         };
       default:
         return {
           color: '#34D399',
-          bg: 'bg-status-healthy/15',
-          border: 'border-status-healthy/30',
+          bg: 'bg-status-healthy/20',
+          border: 'border-status-healthy/50',
           text: 'HEALTHY',
           icon: CheckCircle2,
         };
@@ -116,39 +115,31 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
 
   // Utilization Ring calculation
   const util = Math.max(0, metrics.utilizationPct);
-  const ringRadius = 13;
+  const ringRadius = 15;
   const circumference = 2 * Math.PI * ringRadius;
   const strokeDashoffset = circumference - (Math.min(100, util) / 100) * circumference;
   const isOverUtilized = util > 100;
 
-  // Mini sparkline SVG path
-  const sparkline = metrics.sparkline || [20, 25, 22, 28, 24, 30, 25];
-  const maxVal = Math.max(...sparkline, 1);
-  const sparkPoints = sparkline
-    .map((val, idx) => {
-      const px = (idx / (sparkline.length - 1)) * 48;
-      const py = 16 - (val / maxVal) * 14;
-      return `${px.toFixed(1)},${py.toFixed(1)}`;
-    })
-    .join(' ');
+  const hoverTooltip = `${service.name || label} (${service.role || service.id})\nStatus: ${statusConfig.text}\nRPS: ${Math.round(metrics.rps)}\np95: ${Math.round(metrics.latencyMs)} ms\nUtilization: ${Math.round(util)}%\nQueue Backlog: ${Math.round(metrics.queue)} reqs\nReplicas: ${metrics.activeInstances} ready, ${metrics.crashedInstances} down`;
 
   return (
     <div
-      className={`relative w-60 rounded-xl bg-surface border transition-all duration-200 select-none shadow-noc ${
+      title={hoverTooltip}
+      className={`relative w-[260px] rounded-xl bg-surface border transition-all duration-200 select-none shadow-noc ${
         selected
-          ? 'border-accent ring-2 ring-accent/30 bg-surface-raised scale-[1.02]'
+          ? 'border-accent ring-2 ring-accent/40 bg-surface-raised scale-[1.02]'
           : metrics.isOrigin
-          ? 'border-status-failing/80 ring-2 ring-status-failing/30'
+          ? 'border-status-failing ring-2 ring-status-failing/40'
           : metrics.status === 'failing'
-          ? 'border-status-failing/50'
+          ? 'border-status-failing/70'
           : 'border-border hover:border-border-accent'
       }`}
     >
       {/* Root Cause / Origin Alert Badge */}
       {metrics.isOrigin && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-status-failing text-background text-[9px] font-mono font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 animate-bounce z-20">
-          <Radio className="w-2.5 h-2.5 animate-pulse" />
-          <span>ROOT CAUSE?</span>
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-status-failing text-background text-xs font-mono font-bold px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1.5 animate-bounce z-20">
+          <Radio className="w-3.5 h-3.5 animate-pulse" />
+          <span>ROOT CAUSE</span>
         </div>
       )}
 
@@ -156,33 +147,32 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-2.5 !h-2.5 !bg-accent !border-2 !border-background"
+        className="!w-3 !h-3 !bg-accent !border-2 !border-background"
       />
 
       {/* Source handle on right */}
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-2.5 !h-2.5 !bg-accent !border-2 !border-background"
+        className="!w-3 !h-3 !bg-accent !border-2 !border-background"
       />
 
       {/* Top status stripe */}
       <div
-        className="h-1 w-full rounded-t-xl transition-colors duration-300"
+        className="h-1.5 w-full rounded-t-xl transition-colors duration-300"
         style={{ backgroundColor: statusConfig.color }}
       />
 
-      <div className="p-2.5">
-        {/* Header: Icon, Name, Entry badge, Utilization Ring */}
-        <div className="flex items-center gap-2 mb-2">
+      <div className="p-3 space-y-2">
+        {/* Row 1: Utilisation Ring + Icon and Full-Width Service Name */}
+        <div className="flex items-center gap-2.5 min-w-0">
           {/* Service Icon with Utilization Ring */}
-          <div className="relative w-8 h-8 flex-shrink-0 flex items-center justify-center">
-            {/* SVG Utilization Ring */}
+          <div className="relative w-8 h-8 flex-shrink-0 flex items-center justify-center" title={`${Math.round(util)}% utilization`}>
             <svg className="w-8 h-8 -rotate-90 absolute inset-0">
               <circle
                 cx="16"
                 cy="16"
-                r={ringRadius}
+                r={13}
                 fill="none"
                 stroke="#1F2A44"
                 strokeWidth="2.5"
@@ -190,130 +180,119 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
               <circle
                 cx="16"
                 cy="16"
-                r={ringRadius}
+                r={13}
                 fill="none"
-                stroke={statusConfig.color}
+                stroke={isOverUtilized ? '#EF4444' : statusConfig.color}
                 strokeWidth="2.5"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
+                strokeDasharray={2 * Math.PI * 13}
+                strokeDashoffset={2 * Math.PI * 13 - (Math.min(100, util) / 100) * (2 * Math.PI * 13)}
                 strokeLinecap="round"
                 className={`transition-all duration-300 ${isOverUtilized ? 'animate-pulse' : ''}`}
               />
             </svg>
-            <div className="w-6 h-6 rounded-md bg-surface-raised border border-border flex items-center justify-center text-accent z-10">
-              <Icon className="w-3 h-3" />
+            <div className="w-6 h-6 rounded bg-surface-raised border border-border flex items-center justify-center text-accent z-10">
+              <Icon className="w-3.5 h-3.5" />
             </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-text-primary truncate tracking-tight font-sans">
-                {label}
-              </h4>
-              {service.entry && (
-                <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-accent/20 text-accent font-bold">
-                  ENTRY
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[9px] text-text-dim truncate font-mono">
-                {service.role || service.id}
-              </span>
-              <span className="text-[8px] text-text-muted font-mono font-bold tabular-nums">
-                ({Math.round(util)}% util)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Metrics Row: RPS, Latency, Sparkline */}
-        <div className="grid grid-cols-2 gap-1.5 py-1.5 border-t border-border/60 text-[10px] font-mono">
-          <div>
-            <span className="text-[8px] text-text-muted block uppercase">Throughput</span>
-            <span className="text-text-primary font-semibold tabular-nums">
-              {Math.round(metrics.rps)} <span className="text-text-dim text-[8px]">RPS</span>
-            </span>
-          </div>
-          <div>
-            <span className="text-[8px] text-text-muted block uppercase">p95 Latency</span>
-            <span
-              className={`font-semibold tabular-nums ${
-                metrics.latencyMs > 1000 ? 'text-status-failing' : 'text-text-primary'
-              }`}
-            >
-              {Math.round(metrics.latencyMs)} <span className="text-text-dim text-[8px]">ms</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Queue Warning Row (if any backlog) */}
-        {metrics.queue > 0 && (
-          <div className="flex items-center justify-between py-1 px-1.5 mb-1 rounded bg-orange-500/10 border border-orange-500/20 text-[9px] font-mono">
-            <span className="text-orange-400 font-semibold">Queue Backlog:</span>
-            <span className="text-orange-400 font-bold tabular-nums">
-              {Math.round(metrics.queue)} reqs
-            </span>
-          </div>
-        )}
-
-        {/* Bottom Row: Status Badge & Replica Dots */}
-        <div className="mt-1.5 pt-1.5 border-t border-border/40 flex items-center justify-between">
-          {/* Status Badge (Icon + Text, never color alone) */}
-          <div
-            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase tracking-wider border ${statusConfig.bg} ${statusConfig.border}`}
-            style={{ color: statusConfig.color }}
+          {/* Service Name (Full width with ellipsis + tooltip) */}
+          <h4
+            className="text-[22px] font-bold text-text-primary truncate tracking-tight font-sans min-w-0 flex-1 leading-tight"
+            title={label}
           >
-            <StatusIcon className="w-2.5 h-2.5" />
-            <span>{statusConfig.text}</span>
-          </div>
+            {label}
+          </h4>
+        </div>
 
-          {/* Replica Dots */}
-          <div className="flex items-center gap-1" title={`${metrics.activeInstances} ready, ${metrics.crashedInstances} crashed`}>
-            {/* Active ready instances (green) */}
-            {Array.from({ length: Math.min(metrics.activeInstances, 6) }).map((_, i) => (
-              <span
-                key={`ready-${i}`}
-                className="w-1.5 h-1.5 rounded-full bg-status-healthy transition-all"
-                title="Active ready instance"
-              />
-            ))}
-            {/* Starting instances (pulsing blue) */}
-            {Array.from({ length: Math.min(metrics.startingInstances, 3) }).map((_, i) => (
-              <span
-                key={`start-${i}`}
-                className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"
-                title="Starting instance (warming up)"
-              />
-            ))}
-            {/* Crashed instances (gray 'x') */}
-            {Array.from({ length: Math.min(metrics.crashedInstances, 4) }).map((_, i) => (
-              <span
-                key={`crashed-${i}`}
-                className="w-2 h-2 rounded-full bg-gray-600 text-[6px] font-bold text-white flex items-center justify-center"
-                title="Crashed instance"
-              >
-                ✕
+        {/* Row 2: Dedicated Badges Row (Never overlaps service name) */}
+        <div className="flex items-center justify-between gap-1.5 pt-0.5">
+          <div className="flex items-center gap-1.5">
+            {/* State Badge: text + icon */}
+            <div
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold tracking-wide border ${statusConfig.bg} ${statusConfig.border}`}
+              style={{ color: statusConfig.color }}
+            >
+              <StatusIcon className="w-3.5 h-3.5" />
+              <span>{statusConfig.text}</span>
+            </div>
+
+            {service.entry && (
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-accent/20 text-accent font-bold">
+                ENTRY
               </span>
-            ))}
-            {metrics.activeInstances + metrics.crashedInstances > 6 && (
-              <span className="text-[8px] font-mono text-text-dim">
-                +{metrics.activeInstances + metrics.crashedInstances - 6}
+            )}
+
+            {(service.instances.initial <= 1 || service.instances.min <= 1) && (
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
+                SPOF
               </span>
             )}
           </div>
 
-          {/* Mini Sparkline */}
-          <div className="w-12 h-4 opacity-70">
-            <svg className="w-full h-full overflow-visible">
-              <polyline
-                fill="none"
-                stroke={statusConfig.color}
-                strokeWidth="1.5"
-                points={sparkPoints}
-              />
-            </svg>
+          <div className="text-xs font-mono text-text-dim font-semibold">
+            {Math.round(util)}% util
           </div>
+        </div>
+
+        {/* Row 3: Live Metrics: RPS, p95 (CSS text-[20px] font-bold) */}
+        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-border/60">
+          <div className="bg-surface-raised/70 px-2 py-1 rounded border border-border/40">
+            <span className="text-xs text-text-muted block font-semibold font-mono">RPS</span>
+            <span className="text-[20px] text-text-primary font-bold font-mono tabular-nums leading-tight block">
+              {Math.round(metrics.rps)}
+            </span>
+          </div>
+          <div className="bg-surface-raised/70 px-2 py-1 rounded border border-border/40">
+            <span className="text-xs text-text-muted block font-semibold font-mono">p95 Latency</span>
+            <span
+              className={`text-[20px] font-bold font-mono tabular-nums leading-tight block ${
+                metrics.latencyMs > 1000 ? 'text-status-failing' : 'text-text-primary'
+              }`}
+            >
+              {Math.round(metrics.latencyMs)} ms
+            </span>
+          </div>
+        </div>
+
+        {/* Row 4: Replicas & Queue */}
+        <div className="pt-1.5 border-t border-border/50 flex items-center justify-between text-xs font-mono">
+          <div className="flex items-center gap-1.5" title={`${metrics.activeInstances} ready, ${metrics.crashedInstances} down`}>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(metrics.activeInstances, 5) }).map((_, i) => (
+                <span
+                  key={`ready-${i}`}
+                  className="w-2.5 h-2.5 rounded-full bg-status-healthy ring-1 ring-background"
+                />
+              ))}
+              {Array.from({ length: Math.min(metrics.startingInstances, 2) }).map((_, i) => (
+                <span
+                  key={`start-${i}`}
+                  className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse ring-1 ring-background"
+                />
+              ))}
+              {Array.from({ length: Math.min(metrics.crashedInstances, 4) }).map((_, i) => (
+                <span
+                  key={`crashed-${i}`}
+                  className="w-2.5 h-2.5 rounded-full bg-status-failing ring-1 ring-background"
+                />
+              ))}
+            </div>
+            <span className="text-xs text-text-dim font-semibold tabular-nums">
+              {metrics.activeInstances} ready
+              {metrics.crashedInstances > 0 && (
+                <span className="text-status-failing"> ({metrics.crashedInstances} down)</span>
+              )}
+            </span>
+          </div>
+
+          {/* Queue alert if present */}
+          {metrics.queue > 0 ? (
+            <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 tabular-nums">
+              Q: {Math.round(metrics.queue)}
+            </span>
+          ) : (
+            <span className="text-text-dim text-xs">Queue: 0</span>
+          )}
         </div>
       </div>
     </div>
