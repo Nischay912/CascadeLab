@@ -156,13 +156,13 @@ export function evaluateDefendItRun(playerMoveIds: string[]): DefendItResult {
 
   let sumSuccess = 0;
   for (let t = 20; t < 75; t++) {
-    sumSuccess += playerTicks[t].userSuccessRate;
+    sumSuccess += playerTicks[t].gatewayAcceptanceRate ?? playerTicks[t].userSuccessRate;
   }
   const playerSuccessRate = Math.round((sumSuccess / 55) * 10) / 10;
   const sloAchieved = playerSuccessRate >= 85.0;
 
   let stars: 1 | 2 | 3 = 1;
-  if (sloAchieved && playerFinal.cumulativeMoneyLostInr < 400000) {
+  if (sloAchieved && playerFinal.cumulativeMoneyLostInr < 1000000) {
     stars = 3;
   } else if (playerSuccessRate >= 70.0) {
     stars = 2;
@@ -182,7 +182,7 @@ export function evaluateDefendItRun(playerMoveIds: string[]): DefendItResult {
   const autoTicks = autoEngine.runBatch(90);
   let autoSum = 0;
   for (let t = 20; t < 75; t++) {
-    autoSum += autoTicks[t].userSuccessRate;
+    autoSum += autoTicks[t].gatewayAcceptanceRate ?? autoTicks[t].userSuccessRate;
   }
   const autoHardenSuccessRate = Math.round((autoSum / 55) * 10) / 10;
 

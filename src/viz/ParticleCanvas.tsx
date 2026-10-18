@@ -68,20 +68,28 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    let displayWidth = canvas.clientWidth;
+    let displayHeight = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        displayWidth = Math.floor(entry.contentRect.width * dpr);
+        displayHeight = Math.floor(entry.contentRect.height * dpr);
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
+      }
+    });
+    resizeObserver.observe(canvas);
+
     let animationFrameId: number;
 
     const render = (currentTime: number) => {
-      const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
+      const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.05);
       lastTimeRef.current = currentTime;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-
-      // Ensure canvas internal pixel buffer matches CSS display size
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const displayWidth = Math.floor(rect.width * dpr);
-      const displayHeight = Math.floor(rect.height * dpr);
 
       if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
         canvas.width = displayWidth;
@@ -105,8 +113,8 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
       const nodeMap = new Map<string, Node>();
       nodes.forEach((n) => nodeMap.set(n.id, n));
 
-      const NODE_WIDTH = 295;
-      const NODE_HEIGHT = 145;
+      const NODE_WIDTH = 260;
+      const NODE_HEIGHT = 185;
 
       // 1. Draw Expanding Failure Wave from Origin Node
       if (originNodeId) {
@@ -122,31 +130,26 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
             const ringR = (waveRadiusRef.current + i * 90) % 280;
             const ringAlpha = Math.max(0, 1 - ringR / 280) * 0.65;
 
-            ctx.save();
             ctx.beginPath();
             ctx.arc(originX, originY, ringR, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(248, 113, 113, ${ringAlpha})`;
-            ctx.lineWidth = 2.5 / zoom;
-            ctx.setLineDash([8 / zoom, 8 / zoom]);
-            ctx.shadowColor = '#F87171';
-            ctx.shadowBlur = 12 / zoom;
+            ctx.lineWidth = 2.0 / zoom;
             ctx.stroke();
-            ctx.restore();
           }
 
-          // Pulsing central beacon at origin
-          ctx.save();
+          // Central beacon dot at origin
           ctx.beginPath();
-          ctx.arc(originX, originY, 14, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(248, 113, 113, 0.35)';
-          ctx.shadowColor = '#F87171';
-          ctx.shadowBlur = 16;
+          ctx.arc(originX, originY, 12, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(248, 113, 113, 0.4)';
           ctx.fill();
-          ctx.restore();
         }
       }
 
-      // 2. Animate and Draw Flowing Particles on Edges
+      // 2. Animate and Batch Draw Flowing Particles on Edges
+      const normalPts: Array<{ x: number; y: number; size: number }> = [];
+      const retryPts: Array<{ x: number; y: number; size: number }> = [];
+      const errorPts: Array<{ x: number; y: number; size: number }> = [];
+
       edges.forEach((edge) => {
         const sourceNode = nodeMap.get(edge.source);
         const targetNode = nodeMap.get(edge.target);
@@ -179,23 +182,24 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
         const failureFrac = edgeMetrics ? edgeMetrics.attemptFailureFraction : 0;
         const isBreakerOpen = edgeMetrics?.circuitBreakerState === 'open';
 
-        // Calculate target particle count: scales with log2(rps + 1)
-        let targetCount = 0;
-        if (!isBreakerOpen && rps > 1) {
-          targetCount = Math.min(22, Math.max(3, Math.round(Math.log2(rps) * 2.5)));
+        // Circuit breaker open stops traffic flow completely
+        if (isBreakerOpen) {
+          particlesRef.current.delete(edge.id);
+          return;
         }
 
-        // Get or init particles for this edge
+        // Particle volume proportional to RPS (capped between 2 and 12 per edge)
+        const targetCount = rps > 0 ? Math.min(12, Math.max(2, Math.round(Math.log2(rps + 1) * 1.5))) : 0;
+
         let edgeParticles = particlesRef.current.get(edge.id);
         if (!edgeParticles) {
           edgeParticles = [];
           particlesRef.current.set(edge.id, edgeParticles);
         }
 
-        // Determine particle types based on retry amplification & failure fraction
-        const retryFraction = retryAttempts > 1 ? Math.min(0.85, (retryAttempts - 1) / retryAttempts) : 0;
+        const retryFraction = Math.min(1, Math.max(0, (retryAttempts - 1) / retryAttempts));
 
-        // Spawn new particles if below target
+        // Add particles if below target
         while (edgeParticles.length < targetCount) {
           const rand = Math.random();
           let pType: 'normal' | 'retry' | 'error' = 'normal';
@@ -211,7 +215,7 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
             progress: Math.random(),
             speed: 0.35 + Math.random() * 0.25,
             type: pType,
-            size: pType === 'retry' ? 3.5 : 2.8,
+            size: pType === 'retry' ? 3.2 : 2.5,
           });
         }
 
@@ -220,16 +224,14 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
           edgeParticles.splice(targetCount);
         }
 
-        // Update and draw particles
+        // Update particle positions
         for (let i = 0; i < edgeParticles.length; i++) {
           const particle = edgeParticles[i];
-          // Speed scales moderately with traffic
           const effectiveSpeed = particle.speed * (1 + Math.min(1.5, rps / 600));
           particle.progress += effectiveSpeed * dt;
 
           if (particle.progress >= 1) {
             particle.progress = 0;
-            // Re-evaluate type on respawn
             const rand = Math.random();
             if (rand < failureFrac) {
               particle.type = 'error';
@@ -241,27 +243,48 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
           }
 
           const pt = getBezierPoint(p0, p1, p2, p3, particle.progress);
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, particle.size, 0, Math.PI * 2);
-
           if (particle.type === 'error') {
-            ctx.fillStyle = '#EF4444';
-            ctx.shadowColor = '#EF4444';
+            errorPts.push({ x: pt.x, y: pt.y, size: particle.size });
           } else if (particle.type === 'retry') {
-            ctx.fillStyle = '#FB923C';
-            ctx.shadowColor = '#FB923C';
+            retryPts.push({ x: pt.x, y: pt.y, size: particle.size });
           } else {
-            ctx.fillStyle = '#22D3EE';
-            ctx.shadowColor = '#38BDF8';
+            normalPts.push({ x: pt.x, y: pt.y, size: particle.size });
           }
-
-          ctx.shadowBlur = 6;
-          ctx.fill();
-          ctx.restore();
         }
       });
+
+      // Batched draw: normal particles (cyan)
+      if (normalPts.length > 0) {
+        ctx.beginPath();
+        normalPts.forEach((p) => {
+          ctx.moveTo(p.x + p.size, p.y);
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        });
+        ctx.fillStyle = '#22D3EE';
+        ctx.fill();
+      }
+
+      // Batched draw: retry storm particles (orange)
+      if (retryPts.length > 0) {
+        ctx.beginPath();
+        retryPts.forEach((p) => {
+          ctx.moveTo(p.x + p.size, p.y);
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        });
+        ctx.fillStyle = '#FB923C';
+        ctx.fill();
+      }
+
+      // Batched draw: error particles (red)
+      if (errorPts.length > 0) {
+        ctx.beginPath();
+        errorPts.forEach((p) => {
+          ctx.moveTo(p.x + p.size, p.y);
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        });
+        ctx.fillStyle = '#EF4444';
+        ctx.fill();
+      }
 
       ctx.restore();
       animationFrameId = requestAnimationFrame(render);
@@ -271,6 +294,7 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver.disconnect();
     };
   }, [nodes, edges, currentMetrics, originNodeId, effectsEnabled, prefersReducedMotion, x, y, zoom]);
 

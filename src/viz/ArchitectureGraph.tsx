@@ -54,7 +54,7 @@ const GraphCanvasInner: React.FC<{
     setNodes(layout.nodes as unknown as Node[]);
     setEdges(layout.edges as unknown as Edge[]);
     setTimeout(() => {
-      fitView({ padding: 0.14, duration: 400 });
+      fitView({ padding: 0.06, duration: 400 });
     }, 60);
   }, [layout, fitView, setNodes, setEdges]);
 
@@ -121,8 +121,22 @@ const GraphCanvasInner: React.FC<{
       })
     );
 
-    setEdges((prevEdges) =>
-      prevEdges.map((edge) => {
+    setEdges((prevEdges) => {
+      // Find at most 3 priority edges (highest failure or highest load)
+      const scored = prevEdges.map((edge) => {
+        const edgeMetrics =
+          currentMetrics?.edges[edge.id] ||
+          currentMetrics?.edges[`${edge.source}->${edge.target}`];
+        const isBreakerOpen = edgeMetrics?.circuitBreakerState === 'open';
+        const failureFrac = edgeMetrics?.attemptFailureFraction ?? 0;
+        const rps = edgeMetrics?.effectiveRps ?? 0;
+        const score = (isBreakerOpen ? 100000 : 0) + failureFrac * 10000 + rps;
+        return { id: edge.id, score, isNotable: isBreakerOpen || failureFrac > 0.05 || rps > 300 };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      const top3Ids = new Set(scored.filter((s) => s.isNotable).slice(0, 3).map((s) => s.id));
+
+      return prevEdges.map((edge) => {
         const edgeMetrics =
           currentMetrics?.edges[edge.id] ||
           currentMetrics?.edges[`${edge.source}->${edge.target}`];
@@ -131,6 +145,7 @@ const GraphCanvasInner: React.FC<{
           ...edge,
           data: {
             ...edge.data,
+            isPriorityLabel: top3Ids.has(edge.id),
             metrics: {
               effectiveRps: edgeMetrics?.effectiveRps ?? 0,
               retryAttempts: edgeMetrics?.retryAttempts ?? 1,
@@ -140,8 +155,8 @@ const GraphCanvasInner: React.FC<{
             },
           },
         };
-      })
-    );
+      });
+    });
   }, [currentMetrics, originNodeId, history, currentTime, setNodes, setEdges]);
 
   return (
@@ -158,7 +173,7 @@ const GraphCanvasInner: React.FC<{
         minZoom={0.2}
         maxZoom={2}
         fitView
-        fitViewOptions={{ padding: 0.08 }}
+        fitViewOptions={{ padding: 0.03 }}
         className="bg-background"
       >
         <Background color="#1A243D" gap={20} size={1.5} />

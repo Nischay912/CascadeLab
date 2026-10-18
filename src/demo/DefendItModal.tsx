@@ -266,16 +266,16 @@ export const DefendItModal: React.FC<DefendItModalProps> = ({ isOpen, onClose })
                 </div>
               </div>
 
-              {/* Auto-Harden AI Comparison Card */}
+              {/* Auto-Harden Optimiser Comparison Card */}
               <div className="p-4 rounded-xl bg-surface border border-accent/40 shadow-noc">
                 <div className="flex items-center gap-2 mb-2">
                   <Bot className="w-4 h-4 text-accent" />
                   <h4 className="font-bold text-xs text-text-primary">
-                    CascadeLab Auto-Harden AI's Answer:
+                    CascadeLab Auto-Harden Optimiser's Answer:
                   </h4>
                 </div>
                 <p className="text-[11px] text-text-muted leading-relaxed mb-3">
-                  The AI Optimizer selected: <strong>Circuit Breaker on Payments</strong> + <strong>Full Jitter Backoff</strong> + <strong>API Gateway Load Shedding</strong>.
+                  The Auto-Harden optimiser selected: <strong>Circuit Breaker on Payments</strong> + <strong>Full Jitter Backoff</strong> + <strong>API Gateway Load Shedding</strong>.
                   Achieved <strong>{result.autoHardenSuccessRate}% success</strong> with <strong>₹0 extra monthly cost</strong>!
                 </p>
                 <div className="flex items-center gap-2">

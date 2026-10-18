@@ -125,7 +125,7 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
   return (
     <div
       title={hoverTooltip}
-      className={`relative w-[260px] rounded-xl bg-surface border transition-all duration-200 select-none shadow-noc ${
+      className={`relative w-[280px] h-[190px] max-h-[190px] rounded-xl bg-surface border transition-all duration-200 select-none shadow-noc flex flex-col justify-between overflow-hidden ${
         selected
           ? 'border-accent ring-2 ring-accent/40 bg-surface-raised scale-[1.02]'
           : metrics.isOrigin
@@ -163,8 +163,8 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
         style={{ backgroundColor: statusConfig.color }}
       />
 
-      <div className="p-3 space-y-2">
-        {/* Row 1: Utilisation Ring + Icon and Full-Width Service Name */}
+      <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
+        {/* Row 1: Utilisation Ring + Icon and Full-Width Service Name (2 lines allowed, never truncated) */}
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Service Icon with Utilization Ring */}
           <div className="relative w-8 h-8 flex-shrink-0 flex items-center justify-center" title={`${Math.round(util)}% utilization`}>
@@ -195,16 +195,16 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
             </div>
           </div>
 
-          {/* Service Name (Full width with ellipsis + tooltip) */}
+          {/* Service Name (2 lines allowed, never truncated, text-[37px]) */}
           <h4
-            className="text-[22px] font-bold text-text-primary truncate tracking-tight font-sans min-w-0 flex-1 leading-tight"
+            className="text-[37px] font-bold text-text-primary tracking-tight font-sans min-w-0 flex-1 leading-tight line-clamp-2"
             title={label}
           >
             {label}
           </h4>
         </div>
 
-        {/* Row 2: Dedicated Badges Row (Never overlaps service name) */}
+        {/* Row 2: Dedicated Badges Row & Replica Dots */}
         <div className="flex items-center justify-between gap-1.5 pt-0.5">
           <div className="flex items-center gap-1.5">
             {/* State Badge: text + icon */}
@@ -229,70 +229,47 @@ export const ServiceNode: React.FC<ServiceNodeProps> = ({ data, selected }) => {
             )}
           </div>
 
-          <div className="text-xs font-mono text-text-dim font-semibold">
-            {Math.round(util)}% util
+          {/* Replica Dots */}
+          <div className="flex items-center gap-1" title={`${metrics.activeInstances} ready, ${metrics.crashedInstances} down`}>
+            {Array.from({ length: Math.min(metrics.activeInstances, 5) }).map((_, i) => (
+              <span
+                key={`ready-${i}`}
+                className="w-2.5 h-2.5 rounded-full bg-status-healthy ring-1 ring-background"
+              />
+            ))}
+            {Array.from({ length: Math.min(metrics.startingInstances, 2) }).map((_, i) => (
+              <span
+                key={`start-${i}`}
+                className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse ring-1 ring-background"
+              />
+            ))}
+            {Array.from({ length: Math.min(metrics.crashedInstances, 4) }).map((_, i) => (
+              <span
+                key={`crashed-${i}`}
+                className="w-2.5 h-2.5 rounded-full bg-status-failing ring-1 ring-background"
+              />
+            ))}
           </div>
         </div>
 
-        {/* Row 3: Live Metrics: RPS, p95 (CSS text-[20px] font-bold) */}
-        <div className="grid grid-cols-2 gap-2 pt-1.5 border-t border-border/60">
-          <div className="bg-surface-raised/70 px-2 py-1 rounded border border-border/40">
+        {/* Row 3: Live Metrics: RPS, p95 (CSS text-[35px] font-bold) */}
+        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/60">
+          <div className="bg-surface-raised/70 px-2.5 py-1 rounded border border-border/40">
             <span className="text-xs text-text-muted block font-semibold font-mono">RPS</span>
-            <span className="text-[20px] text-text-primary font-bold font-mono tabular-nums leading-tight block">
+            <span className="text-[35px] text-text-primary font-bold font-mono tabular-nums leading-tight block">
               {Math.round(metrics.rps)}
             </span>
           </div>
-          <div className="bg-surface-raised/70 px-2 py-1 rounded border border-border/40">
+          <div className="bg-surface-raised/70 px-2.5 py-1 rounded border border-border/40">
             <span className="text-xs text-text-muted block font-semibold font-mono">p95 Latency</span>
             <span
-              className={`text-[20px] font-bold font-mono tabular-nums leading-tight block ${
+              className={`text-[35px] font-bold font-mono tabular-nums leading-tight block ${
                 metrics.latencyMs > 1000 ? 'text-status-failing' : 'text-text-primary'
               }`}
             >
               {Math.round(metrics.latencyMs)} ms
             </span>
           </div>
-        </div>
-
-        {/* Row 4: Replicas & Queue */}
-        <div className="pt-1.5 border-t border-border/50 flex items-center justify-between text-xs font-mono">
-          <div className="flex items-center gap-1.5" title={`${metrics.activeInstances} ready, ${metrics.crashedInstances} down`}>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(metrics.activeInstances, 5) }).map((_, i) => (
-                <span
-                  key={`ready-${i}`}
-                  className="w-2.5 h-2.5 rounded-full bg-status-healthy ring-1 ring-background"
-                />
-              ))}
-              {Array.from({ length: Math.min(metrics.startingInstances, 2) }).map((_, i) => (
-                <span
-                  key={`start-${i}`}
-                  className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse ring-1 ring-background"
-                />
-              ))}
-              {Array.from({ length: Math.min(metrics.crashedInstances, 4) }).map((_, i) => (
-                <span
-                  key={`crashed-${i}`}
-                  className="w-2.5 h-2.5 rounded-full bg-status-failing ring-1 ring-background"
-                />
-              ))}
-            </div>
-            <span className="text-xs text-text-dim font-semibold tabular-nums">
-              {metrics.activeInstances} ready
-              {metrics.crashedInstances > 0 && (
-                <span className="text-status-failing"> ({metrics.crashedInstances} down)</span>
-              )}
-            </span>
-          </div>
-
-          {/* Queue alert if present */}
-          {metrics.queue > 0 ? (
-            <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 tabular-nums">
-              Q: {Math.round(metrics.queue)}
-            </span>
-          ) : (
-            <span className="text-text-dim text-xs">Queue: 0</span>
-          )}
         </div>
       </div>
     </div>

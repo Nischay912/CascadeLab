@@ -270,14 +270,32 @@ export function runAutoHardenOptimizer(
 
   const greedyEval = evaluateBitmask(greedyMask);
   const greedyFullReport = runChaosSuite(greedyEval.spec);
-  const greedyChanges = generateArchitectureDiff(baselineSpec, greedyEval.spec);
+
+  let bestSolutionSpec = greedyEval.spec;
+  let bestSolutionReport = greedyFullReport;
+  let bestAppliedIds = greedyEval.appliedIds;
+  let bestCost = greedyEval.cost;
+
+  // Check the single highest-scoring Pareto candidate if it scored higher than greedy
+  const highestFastSol = [...nonDominated].sort((a, b) => b.score - a.score)[0];
+  if (highestFastSol && highestFastSol.score > greedyEval.score) {
+    const fullRep = runChaosSuite(highestFastSol.spec);
+    if (fullRep.compositeResilienceScore > bestSolutionReport.compositeResilienceScore) {
+      bestSolutionSpec = highestFastSol.spec;
+      bestSolutionReport = fullRep;
+      bestAppliedIds = highestFastSol.appliedIds;
+      bestCost = highestFastSol.cost;
+    }
+  }
+
+  const greedyChanges = generateArchitectureDiff(baselineSpec, bestSolutionSpec);
 
   const greedySolution: ParetoSolution = {
     id: 'greedy-recommendation',
-    spec: greedyEval.spec,
-    resilienceScore: greedyFullReport.compositeResilienceScore,
-    monthlyCostInr: greedyEval.cost,
-    appliedCandidateIds: greedyEval.appliedIds,
+    spec: bestSolutionSpec,
+    resilienceScore: bestSolutionReport.compositeResilienceScore,
+    monthlyCostInr: bestCost,
+    appliedCandidateIds: bestAppliedIds,
     changes: greedyChanges,
     isParetoOptimal: true,
   };

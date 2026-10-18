@@ -52,7 +52,13 @@ export interface SimulationTickMetrics {
   entryRps: number;
   totalInternalRps: number;
   amplification: number;
-  userSuccessRate: number;
+  gatewayAcceptanceRate: number; // fraction of entry requests accepted at gateway (0..100)
+  userSuccessRate: number; // true end-to-end user success rate across all journey types (0..100)
+  journeySuccessRates?: {
+    browse: number;
+    cart: number;
+    checkout: number;
+  };
   userP95Ms: number;
   moneyLostInr: number;
   cumulativeMoneyLostInr: number;
@@ -62,6 +68,7 @@ export interface SimulationTickMetrics {
   edges: Record<string, EdgeSimulationState>;
   activeFaults: string[];
   isMetastable: boolean;
+  prolongedRecoverySeconds?: number;
 }
 
 export class SimulationEngine {
@@ -191,7 +198,29 @@ export class SimulationEngine {
       // Cache hit ratio reduction
       const baseHitRatio = edge.cache.hit_ratio || 0;
       const effectiveHitRatio = Math.max(0, Math.min(1.0, baseHitRatio * edgeMod.cacheHitMultiplier));
-      const p_eff = edge.calls_per_request * (1.0 - effectiveHitRatio);
+      let p_eff = edge.calls_per_request * (1.0 - effectiveHitRatio);
+
+      // Cache Flush Stampede Backing Store Coupling (Spec Section 3.3):
+      // When a caller has a cache edge (e.g. catalog -> cache with 90% hit ratio)
+      // and a fallback edge to a backing database (e.g. catalog -> products-db),
+      // a cache wipe causes all misses to storm the backing store:
+      // missRate = 1 - cacheHitRatio; backing store load scales by missRate / nominalMissRate!
+      if (baseHitRatio === 0 && edge.from) {
+        const callerCacheEdge = this.spec.edges.find(
+          (e) => e.from === edge.from && (e.cache?.hit_ratio || 0) > 0
+        );
+        if (callerCacheEdge) {
+          const nominalCacheHit = callerCacheEdge.cache.hit_ratio;
+          const nominalMissRate = Math.max(0.01, 1.0 - nominalCacheHit);
+          const cacheEdgeMod =
+            edgeModifiers.get(callerCacheEdge.id || `${callerCacheEdge.from}->${callerCacheEdge.to}`) ||
+            edgeModifiers.get(callerCacheEdge.to) ||
+            { isCut: false, cacheHitMultiplier: 1.0 };
+          const currentCacheHit = Math.max(0, Math.min(1.0, nominalCacheHit * cacheEdgeMod.cacheHitMultiplier));
+          const currentMissRate = 1.0 - currentCacheHit;
+          p_eff = edge.calls_per_request * (currentMissRate / nominalMissRate);
+        }
+      }
 
       // Callee latency and error rate from previous tick
       const calleeW = Math.max(0.1, callee.meanLatencyMs);
@@ -533,7 +562,33 @@ export class SimulationEngine {
     const entrySvc = this.spec.services.find((s) => s.entry) || this.spec.services[0];
     const entryState = this.serviceStates.get(entrySvc.id)!;
 
-    const userSuccessRate = entryState.successRate;
+    // Gateway Acceptance: fraction of user requests admitted through the entry gateway without rejection
+    const gatewayAcceptedRps = Math.max(0, entryState.arrivalRate - entryState.rejectedRate);
+    const gatewayAcceptanceRate = entryState.arrivalRate > 0
+      ? Math.max(0, Math.min(100, (gatewayAcceptedRps / entryState.arrivalRate) * 100))
+      : 100.0;
+
+    // Per-journey end-to-end success rates:
+    // User success must be end-to-end per request type (browse / cart / checkout),
+    // and failed checkouts must count as failures unless a fallback is modelled (B1).
+    const catalogState = this.serviceStates.get('catalog');
+    const cartState = this.serviceStates.get('cart');
+    const checkoutState = this.serviceStates.get('checkout');
+
+    const browseDownstream = catalogState ? catalogState.successRate / 100 : 1.0;
+    const cartDownstream = cartState ? cartState.successRate / 100 : 1.0;
+    const checkoutDownstream = checkoutState ? checkoutState.successRate / 100 : 1.0;
+
+    const journeyBrowse = Math.max(0, Math.min(100, (gatewayAcceptanceRate / 100) * browseDownstream * 100));
+    const journeyCart = Math.max(0, Math.min(100, (gatewayAcceptanceRate / 100) * cartDownstream * 100));
+    const journeyCheckout = Math.max(0, Math.min(100, (gatewayAcceptanceRate / 100) * checkoutDownstream * 100));
+
+    // End-to-end user success across call mix: browse (60%), cart (25%), checkout (15%)
+    let userSuccessRate = entryState.successRate;
+    if (catalogState && cartState && checkoutState) {
+      userSuccessRate = 0.60 * journeyBrowse + 0.25 * journeyCart + 0.15 * journeyCheckout;
+    }
+
     const userP95Ms = entryState.p95Ms;
 
     let totalInternalRps = 0;
@@ -547,10 +602,11 @@ export class SimulationEngine {
     const moneyLostThisSec = failedRequests * (this.spec.value_per_request_inr || 40);
     this.cumulativeMoneyLostInr += moneyLostThisSec;
 
-    // Metastable Failure Detection:
+    // Metastable Failure Detection (D1: computed, not hard-coded):
     // Sustained failure (success < SLO) after all triggers/faults have ended
-    const isAfterTrigger = this.lastTriggerEndTime > 0 && t >= this.lastTriggerEndTime + 15;
+    const isAfterTrigger = this.lastTriggerEndTime > 0 && t >= this.lastTriggerEndTime;
     const isMetastable = isAfterTrigger && userSuccessRate < this.spec.slo.success_pct - 10;
+    const prolongedRecoverySeconds = (isAfterTrigger && isMetastable) ? t - this.lastTriggerEndTime : 0;
 
     // Snapshot records for caller
     const servicesRecord: Record<string, ServiceSimulationState> = {};
@@ -568,7 +624,13 @@ export class SimulationEngine {
       entryRps: offeredEntryRps,
       totalInternalRps,
       amplification: Math.round(amplification * 10) / 10,
+      gatewayAcceptanceRate: Math.round(gatewayAcceptanceRate * 10) / 10,
       userSuccessRate: Math.round(userSuccessRate * 10) / 10,
+      journeySuccessRates: {
+        browse: Math.round(journeyBrowse * 10) / 10,
+        cart: Math.round(journeyCart * 10) / 10,
+        checkout: Math.round(journeyCheckout * 10) / 10,
+      },
       userP95Ms: Math.round(userP95Ms),
       moneyLostInr: Math.round(moneyLostThisSec),
       cumulativeMoneyLostInr: Math.round(this.cumulativeMoneyLostInr),
@@ -578,6 +640,7 @@ export class SimulationEngine {
       edges: edgesRecord,
       activeFaults: activeFaults.map((f) => f.id || `${f.type}:${f.target}`),
       isMetastable,
+      prolongedRecoverySeconds,
     };
   }
 

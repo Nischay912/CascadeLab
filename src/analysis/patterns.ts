@@ -41,15 +41,26 @@ function detectRetryStorm(
   _spec: ArchitectureSpec,
   history: SimulationTickMetrics[]
 ): PatternDetectionResult {
-  let peakAmplification = 1.0;
+  if (history.length === 0) {
+    return { pattern: 'retry_storm', detected: false, confidence: 0.1, evidence: [] };
+  }
+
+  // Baseline fan-out at t=0
+  const baselineFanout = history[0].entryRps > 0
+    ? Math.max(1.0, history[0].totalInternalRps / history[0].entryRps)
+    : 4.2;
+
+  let peakRetryAmp = 1.0;
   let worstEdge: { id: string; from: string; to: string; attempts: number } | null = null;
   let stormTicks = 0;
 
   for (const tick of history) {
-    if (tick.amplification > peakAmplification) {
-      peakAmplification = tick.amplification;
+    const baselineExpectedInternal = Math.max(1, tick.entryRps * baselineFanout);
+    const retryAmp = tick.totalInternalRps / baselineExpectedInternal;
+    if (retryAmp > peakRetryAmp) {
+      peakRetryAmp = retryAmp;
     }
-    if (tick.amplification > 1.3 && tick.userSuccessRate < 90) {
+    if (retryAmp >= 1.25 && tick.userSuccessRate < 90) {
       stormTicks++;
     }
 
@@ -65,15 +76,16 @@ function detectRetryStorm(
     }
   }
 
-  const detected = peakAmplification >= 1.4 && stormTicks >= 5;
+  const detected = peakRetryAmp >= 1.3 && stormTicks >= 4;
+  // B2: Heuristic formula based on true retry amplification
   const confidence = detected
-    ? Math.min(0.98, Math.max(0.65, (peakAmplification - 1) / 2.5 + 0.4))
+    ? Math.min(0.98, Math.max(0.60, 0.60 + (peakRetryAmp - 1.0) * 0.30))
     : 0.1;
 
   const evidence: string[] = [];
   if (detected && worstEdge) {
     evidence.push(
-      `Internal request load amplified by ${peakAmplification.toFixed(1)}× over external traffic.`
+      `Retry amplification surged to ${peakRetryAmp.toFixed(1)}× nominal internal load (baseline fan-out: ${baselineFanout.toFixed(1)}×).`
     );
     evidence.push(
       `Edge '${worstEdge.from} → ${worstEdge.to}' generated ${worstEdge.attempts.toFixed(1)}× attempt multiplication under failure.`

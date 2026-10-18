@@ -31,7 +31,7 @@ export const DEMO_DIRECTOR_STEPS: DemoDirectorStep[] = [
   {
     id: 4,
     title: '4. Auto-Harden & Pareto Frontier',
-    badge: 'Step 4 of 6 • AI Optimizer',
+    badge: 'Step 4 of 6 • Auto-Harden Optimiser',
     narration:
       'We trigger Auto-Harden. The NSGA-II Lite multi-objective genetic algorithm explores trade-offs in real time, building a Pareto Frontier. It isolates a zero-cost hardening policy (Circuit Breaker + Jittered Backoff + Load Shedding) jumping resilience from 38 to 87!',
     tab: 'optimizer',

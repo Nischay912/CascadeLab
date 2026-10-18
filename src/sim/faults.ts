@@ -117,6 +117,12 @@ export function evaluateActiveFaults(
           isCut: false,
           cacheHitMultiplier: recoveryProgress,
         });
+        if (fault.target === 'cache' || fault.target.includes('cache')) {
+          edgeModifiers.set('catalog->cache', {
+            isCut: false,
+            cacheHitMultiplier: recoveryProgress,
+          });
+        }
         break;
       }
     }

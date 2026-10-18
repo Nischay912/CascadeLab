@@ -190,12 +190,99 @@ export const App: React.FC = () => {
         isPresenterMode={isPresenterMode}
         onTogglePresenterMode={() => {
           setIsPresenterMode((prev) => !prev);
-          setIsDirectorOpen((prev) => !prev);
         }}
         userSuccessRate={currentMetrics?.userSuccessRate}
         userP95Ms={currentMetrics?.userP95Ms}
         cumulativeMoneyLostInr={currentMetrics?.cumulativeMoneyLostInr}
+        valuePerRequestInr={currentSpec.value_per_request_inr || 500}
+        onUpdateValuePerRequest={(val) => {
+          setSpec({
+            ...currentSpec,
+            value_per_request_inr: val,
+          });
+        }}
+        onInjectFault={(f) => {
+          let target = 'payment-provider';
+          let factor = 5;
+          let type = f;
+          if (f === 'kill_instances') {
+            target = 'auth';
+          } else if (f === 'kill_100') {
+            target = 'orders-db';
+            type = 'kill_instances';
+          } else if (f === 'cache_flush') {
+            target = 'cache';
+          } else if (f === 'az_outage') {
+            target = 'all';
+          }
+          addFault({
+            type: type as any,
+            target,
+            start_s: currentTime || 60,
+            end_s: (currentTime || 60) + 60,
+            factor,
+            percentage: f === 'kill_100' ? 100 : 50,
+          });
+          runSimulationBatch(currentSpec, 180, seed);
+        }}
       />
+
+      {/* Presenter Mode KPI Banner (Priority A7) */}
+      {isPresenterMode && (
+        <div className="bg-surface-raised border-b border-accent/40 px-6 py-2.5 flex items-center justify-between gap-6 shadow-noc z-20">
+          <div className="flex items-center gap-8 flex-1 justify-around">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">Ingress Load</span>
+              <span className="text-2xl font-bold font-mono text-accent tabular-nums">
+                {Math.round(currentMetrics?.ingressRps ?? 600)} <span className="text-sm font-normal text-text-dim">RPS</span>
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">User Success Rate</span>
+              <span
+                className={`text-2xl font-bold font-mono tabular-nums ${
+                  (currentMetrics?.userSuccessRate ?? 100) >= 99
+                    ? 'text-status-healthy'
+                    : (currentMetrics?.userSuccessRate ?? 100) >= 90
+                    ? 'text-status-degraded'
+                    : 'text-status-failing'
+                }`}
+              >
+                {(currentMetrics?.userSuccessRate ?? 100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">p95 Latency</span>
+              <span
+                className={`text-2xl font-bold font-mono tabular-nums ${
+                  (currentMetrics?.userP95Ms ?? 410) > 800 ? 'text-status-failing' : 'text-text-primary'
+                }`}
+              >
+                {Math.round(currentMetrics?.userP95Ms ?? 410)}{' '}
+                <span className="text-sm font-normal text-text-dim">ms</span>
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">Revenue Lost</span>
+              <span className="text-2xl font-bold font-mono text-status-failing tabular-nums">
+                ₹{Math.round(currentMetrics?.cumulativeMoneyLostInr ?? 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-accent/20 text-accent font-mono text-xs border border-accent/40 font-semibold">
+              PRESENTER MODE
+            </span>
+            <button
+              onClick={() => setIsPresenterMode(false)}
+              className="px-2.5 py-1 rounded bg-surface border border-border text-xs text-text-muted hover:text-text-primary hover:border-accent"
+              title="Exit Presenter Mode (P)"
+            >
+              Exit (P)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Workspace: Left Panel + Center Canvas + Right Panel */}
       <div className="flex-1 flex overflow-hidden">

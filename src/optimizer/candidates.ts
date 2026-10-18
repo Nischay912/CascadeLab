@@ -64,7 +64,7 @@ export function generateCandidateActions(spec: ArchitectureSpec): CandidateActio
           if (target) {
             target.circuit_breaker = {
               enabled: true,
-              failure_rate_threshold: 0.5,
+              failure_rate_threshold: 0.35,
               min_calls: 10,
               open_duration_s: 15,
               probe_fraction: 0.1,
@@ -198,16 +198,24 @@ export function generateCandidateActions(spec: ArchitectureSpec): CandidateActio
       const candidateId = `reduce-retries-${edgeKey}`;
       if (!seenIds.has(candidateId)) {
         seenIds.add(candidateId);
+        const isNonIdempotent =
+          edgeKey.includes('checkout') ||
+          edgeKey.includes('payment') ||
+          edge.to.includes('pay') ||
+          edge.to.includes('bank') ||
+          edge.to.includes('orders-db');
+        const targetRetries = isNonIdempotent ? 0 : 1;
+
         const applyFn = (orig: ArchitectureSpec) => {
           const cloned = cloneSpec(orig);
           const target = cloned.edges.find((e) => (e.id || `${e.from}->${e.to}`) === edgeKey);
           if (target) {
-            target.retries = 1;
+            target.retries = targetRetries;
             target.backoff = {
               mode: 'exponential',
               jitter: true,
-              base_delay_ms: Math.max(50, target.backoff?.base_delay_ms || 50),
-              max_delay_ms: Math.max(1000, target.backoff?.max_delay_ms || 1000),
+              base_delay_ms: Math.max(100, target.backoff?.base_delay_ms || 100),
+              max_delay_ms: Math.max(1500, target.backoff?.max_delay_ms || 1500),
             };
           }
           return cloned;
@@ -215,11 +223,13 @@ export function generateCandidateActions(spec: ArchitectureSpec): CandidateActio
 
         candidates.push({
           id: candidateId,
-          title: `Cap Retries on ${edge.from} → ${edge.to} to 1 (Bounded Retry Budget)`,
+          title: `Cap Retries on ${edge.from} → ${edge.to} to ${targetRetries} (${isNonIdempotent ? 'Non-Idempotent Zero Retries' : 'Bounded Budget'})`,
           category: 'retry_backoff',
           targetType: 'edge',
           targetId: edgeKey,
-          description: `Limits downstream retry amplification factor from ${edge.retries + 1}× to 2× maximum.`,
+          description: isNonIdempotent
+            ? `Prevents duplicate side-effects and breaks resonant retry storms on critical write operations.`
+            : `Limits downstream retry amplification factor from ${edge.retries + 1}× to 2× maximum.`,
           costDeltaInr: 0,
           apply: applyFn,
         });
@@ -289,6 +299,74 @@ export function generateCandidateActions(spec: ArchitectureSpec): CandidateActio
           targetId: svc.id,
           description: `Allows dynamic scale-up under surge to avoid saturation collapse.`,
           costDeltaInr: 0,
+          apply: applyFn,
+        });
+      }
+    }
+  }
+
+  // 9. Worker Pool Concurrency & Queue Capacity Expansion
+  for (const svc of spec.services) {
+    if (svc.concurrency <= 15 && !svc.id.includes('db')) {
+      const candidateId = `concurrency-upgrade-${svc.id}`;
+      if (!seenIds.has(candidateId)) {
+        seenIds.add(candidateId);
+        const applyFn = (orig: ArchitectureSpec) => {
+          const cloned = cloneSpec(orig);
+          const target = cloned.services.find((s) => s.id === svc.id);
+          if (target) {
+            target.concurrency = 25;
+            target.queue_limit = Math.max(250, target.queue_limit);
+          }
+          return cloned;
+        };
+
+        candidates.push({
+          id: candidateId,
+          title: `Expand Worker Pool Concurrency on ${svc.name || svc.id} (${svc.concurrency} → 25)`,
+          category: 'replica_scale',
+          targetType: 'service',
+          targetId: svc.id,
+          description: `Prevents caller thread pool starvation under transient downstream latency spikes.`,
+          costDeltaInr: 0,
+          apply: applyFn,
+        });
+      }
+    }
+  }
+
+  // 10. Horizontal Scaling for Critical Ingress / Saturated Services
+  for (const svc of spec.services) {
+    const isCriticalPipeline =
+      svc.entry ||
+      svc.id === 'checkout' ||
+      svc.id === 'payments' ||
+      svc.id === 'upi-switch';
+    if (isCriticalPipeline && svc.instances.initial <= 5) {
+      const candidateId = `scale-pipeline-${svc.id}`;
+      if (!seenIds.has(candidateId)) {
+        seenIds.add(candidateId);
+        const deltaInstances = svc.entry ? 2 : 1;
+        const applyFn = (orig: ArchitectureSpec) => {
+          const cloned = cloneSpec(orig);
+          const target = cloned.services.find((s) => s.id === svc.id);
+          if (target) {
+            target.instances.initial += deltaInstances;
+            target.instances.min += deltaInstances;
+            target.instances.max = Math.max(target.instances.max + deltaInstances, target.instances.initial * 2);
+          }
+          return cloned;
+        };
+
+        const costDelta = (svc.cost_inr_per_instance_month ?? 2500) * deltaInstances;
+        candidates.push({
+          id: candidateId,
+          title: `Scale ${svc.name || svc.id} (+${deltaInstances} Replicas)`,
+          category: 'replica_scale',
+          targetType: 'service',
+          targetId: svc.id,
+          description: `Provides necessary headroom for failover redundancy and traffic surges.`,
+          costDeltaInr: costDelta,
           apply: applyFn,
         });
       }

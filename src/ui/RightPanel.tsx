@@ -324,14 +324,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                     </span>
                   </div>
 
-                  {/* Evidence Strength (Renamed from Confidence; displays formula in tooltip) */}
+                  {/* Evidence Strength (Heuristic, shows formula and inputs in tooltip) */}
                   <div
                     className="flex items-center justify-between"
-                    title="Formula: min(0.98, max(0.65, (peakAmplification - 1)/2.5 + 0.4)). Sourced from internal load amplification and failure duration."
+                    title="Formula: min(98%, 60% + (retry_amp - 1.0) * 30%) | Inputs: retry_amp = internal_load / (entry_load * baseline_fanout), baseline_fanout = 4.2x. Label: Heuristic rule-based inference."
                   >
-                    <span className="uppercase tracking-wider text-text-muted font-bold">Evidence Strength</span>
+                    <span className="uppercase tracking-wider text-text-muted font-bold">Evidence Strength (Heuristic)</span>
                     <span className="font-mono font-bold text-text-primary">
-                      {Math.round(rootCause.confidence * 100)}% (computed)
+                      {Math.round(rootCause.confidence * 100)}%
                     </span>
                   </div>
 

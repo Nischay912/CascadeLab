@@ -34,12 +34,14 @@ export function runFastResilienceSuite(spec: ArchitectureSpec): FastSuiteReport 
     if (e.critical && e.mode === 'sync') criticalTargets.add(e.to);
   });
 
-  // Pick latency_5x and error_30 on critical targets
+  // Pick latency_5x, kill_50, and error_30 on critical targets
   for (const targetId of criticalTargets) {
     const latFault = allScenarios.find((s) => s.targetServiceId === targetId && s.faultType === 'latency_5x');
-    if (latFault && selected.length < 8) selected.push(latFault);
+    if (latFault && selected.length < 10) selected.push(latFault);
+    const killFault = allScenarios.find((s) => s.targetServiceId === targetId && s.faultType === 'kill_50');
+    if (killFault && selected.length < 10) selected.push(killFault);
     const errFault = allScenarios.find((s) => s.targetServiceId === targetId && s.faultType === 'error_30');
-    if (errFault && selected.length < 8) selected.push(errFault);
+    if (errFault && selected.length < 10) selected.push(errFault);
   }
 
   // Fallback if needed

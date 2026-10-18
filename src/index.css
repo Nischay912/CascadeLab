@@ -44,3 +44,9 @@
 .animate-pulse-subtle {
   animation: pulse-subtle 2.5s infinite ease-in-out;
 }
+
+/* Ensure ReactFlow service nodes are always visible without delayed measurement flicker */
+.react-flow__node {
+  visibility: visible !important;
+}
+

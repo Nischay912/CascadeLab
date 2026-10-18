@@ -10,6 +10,7 @@ import { EdgeSpec } from '../schema/architecture';
 
 export interface TrafficEdgeData {
   edge: EdgeSpec;
+  isPriorityLabel?: boolean;
   metrics?: {
     effectiveRps: number;
     retryAttempts: number;
@@ -30,6 +31,7 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
   data,
   selected,
 }) => {
+  const [isHovered, setIsHovered] = React.useState(false);
   const edgeData = data as TrafficEdgeData | undefined;
   const edgeSpec = edgeData?.edge || {
     from: '',
@@ -84,17 +86,24 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
     ? '#22D3EE'
     : '#1F2A44';
 
-  // Show edge labels only on selection, active circuit breaker, retry storm, or high throughput
-  const showLabel =
-    selected ||
-    isBreakerOpen ||
-    isBreakerHalfOpen ||
-    metrics.effectiveRps >= 1000 ||
-    metrics.retryAttempts > 1.3 ||
-    metrics.attemptFailureFraction > 0.15;
+  // Show edge labels only on selection, hover, or at most 3 priority (busiest / failing) edges
+  const showLabel = selected || isHovered || Boolean(edgeData?.isPriorityLabel);
 
   return (
-    <>
+    <g
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="cursor-pointer"
+    >
+      {/* Invisible wider hit stroke for easy hover */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={20}
+        className="pointer-events-stroke"
+      />
+
       <BaseEdge
         id={id}
         path={edgePath}
@@ -106,22 +115,24 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
         }}
       />
 
-      {/* Edge pill label renderer (>= 12px font, non-overlapping) */}
+      {/* Edge pill label renderer (>= 12px font, non-overlapping, solid background) */}
       {showLabel && (
         <EdgeLabelRenderer>
           <div
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: 'all',
             }}
-            className={`flex items-center gap-1.5 backdrop-blur border px-2.5 py-1 rounded-md text-xs font-mono shadow-md cursor-pointer transition-all ${
+            className={`flex items-center gap-1.5 backdrop-blur border px-2.5 py-1 rounded-md text-xs font-mono shadow-md cursor-pointer transition-all z-20 ${
               selected
                 ? 'border-accent bg-surface-raised ring-2 ring-accent/40 z-30'
                 : isBreakerOpen
-                ? 'border-status-failing/80 bg-status-failing/20 text-status-failing z-20'
+                ? 'border-status-failing/80 bg-surface-raised/95 text-status-failing'
                 : isRetryStorm
-                ? 'border-orange-500/60 bg-surface-raised text-orange-400 z-10'
+                ? 'border-orange-500/60 bg-surface-raised/95 text-orange-400'
                 : 'border-border bg-surface-raised/95 hover:border-accent text-text-primary'
             }`}
             title={`${edgeSpec.from} → ${edgeSpec.to} | Mode: ${edgeSpec.mode} | Timeout: ${edgeSpec.timeout_ms}ms | Load: ${Math.round(metrics.effectiveRps)} RPS`}
@@ -178,6 +189,6 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
           </div>
         </EdgeLabelRenderer>
       )}
-    </>
+    </g>
   );
 };

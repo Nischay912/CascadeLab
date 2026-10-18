@@ -36,6 +36,9 @@ interface TopNavProps {
   userSuccessRate?: number;
   userP95Ms?: number;
   cumulativeMoneyLostInr?: number;
+  onInjectFault?: (faultType: string) => void;
+  valuePerRequestInr?: number;
+  onUpdateValuePerRequest?: (val: number) => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -49,6 +52,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onSelectTemplate,
   selectedScenario,
   onSelectScenario,
+  onInjectFault,
   resilienceScore,
   onAutoHarden,
   onOpenBreakIt,
@@ -59,7 +63,11 @@ export const TopNav: React.FC<TopNavProps> = ({
   userSuccessRate = 99.2,
   userP95Ms = 410,
   cumulativeMoneyLostInr = 0,
+  valuePerRequestInr = 500,
+  onUpdateValuePerRequest,
 }) => {
+  const [isEditingValue, setIsEditingValue] = React.useState(false);
+  const [tempValue, setTempValue] = React.useState(String(valuePerRequestInr));
   return (
     <header className="h-14 bg-surface border-b border-border px-3 sm:px-4 flex items-center justify-between gap-2 lg:gap-3 select-none flex-shrink-0 z-30 shadow-noc">
       {/* Left: Brand & Selectors */}
@@ -116,6 +124,31 @@ export const TopNav: React.FC<TopNavProps> = ({
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        {/* Inject Fault Dropdown (Priority A4 for 1366x768 clearance) */}
+        {onInjectFault && (
+          <div className="relative group">
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  onInjectFault(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              className="appearance-none bg-status-failing/15 hover:bg-status-failing/25 border border-status-failing/40 text-status-failing text-xs font-semibold py-1.5 pl-2.5 pr-7 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-status-failing max-w-[130px] sm:max-w-[150px] truncate"
+            >
+              <option value="" disabled>⚡ Inject Fault</option>
+              <option value="latency">Payment Latency (5×)</option>
+              <option value="kill_instances">Kill 50% Auth Nodes</option>
+              <option value="kill_100">Kill Orders DB (SPOF)</option>
+              <option value="cache_flush">Redis Cache Wipe</option>
+              <option value="az_outage">Zone B AZ Outage</option>
+              <option value="gray_failure">Gray Silent Failure</option>
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-status-failing absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        )}
       </div>
 
       {/* Center: Playback Controls */}
@@ -177,7 +210,7 @@ export const TopNav: React.FC<TopNavProps> = ({
       {/* Right: Live Telemetry & Actions */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
         {/* Live Scenario Ingress Success Pill (Explicitly separate from static & chaos scores) */}
-        <div className="hidden 2xl:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs font-mono" title="Live Scenario Ingress Success Rate (SLO target: 99.0%)">
+        <div className="hidden lg:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs font-mono" title="Live Scenario Ingress Success Rate (SLO target: 99.0%)">
           <span
             className={`w-2 h-2 rounded-full ${
               userSuccessRate >= 99
@@ -194,7 +227,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </div>
 
         {/* p95 Pill */}
-        <div className="hidden 2xl:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs font-mono">
+        <div className="hidden lg:flex items-center gap-1.5 bg-surface-raised px-2.5 py-1 rounded-md border border-border text-xs font-mono">
           <Activity className="w-3.5 h-3.5 text-accent" />
           <span className="text-text-muted">p95:</span>
           <span
@@ -206,16 +239,51 @@ export const TopNav: React.FC<TopNavProps> = ({
           </span>
         </div>
 
-        {/* ₹ Lost Counter */}
-        <div className="hidden 2xl:flex items-center gap-1.5 bg-surface-raised px-2 py-1 rounded-md border border-border text-xs font-mono">
-          <span
-            className={`font-bold tabular-nums ${
-              cumulativeMoneyLostInr > 0 ? 'text-status-failing' : 'text-text-muted'
-            }`}
-          >
-            ₹ {Math.round(cumulativeMoneyLostInr).toLocaleString('en-IN')}
-          </span>
-          <span className="text-xs text-text-dim">lost</span>
+        {/* ₹ Lost Counter (Priority A5: Tooltip formula + editable assumption) */}
+        <div
+          className="hidden lg:flex items-center gap-1.5 bg-surface-raised hover:bg-surface-hover px-2.5 py-1 rounded-md border border-border text-xs font-mono cursor-pointer transition-colors"
+          title={`Financial Loss Model (Spec §3.3):\nTotal Lost = Failed User Journeys × ₹${valuePerRequestInr} (Gross Value per Transaction).\nClick to edit default ₹${valuePerRequestInr} assumption.`}
+          onClick={() => setIsEditingValue((prev) => !prev)}
+        >
+          {isEditingValue ? (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <span className="text-text-muted">₹</span>
+              <input
+                type="number"
+                value={tempValue}
+                onChange={(e) => setTempValue(e.target.value)}
+                onBlur={() => {
+                  const val = Number(tempValue);
+                  if (val > 0 && onUpdateValuePerRequest) onUpdateValuePerRequest(val);
+                  setIsEditingValue(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = Number(tempValue);
+                    if (val > 0 && onUpdateValuePerRequest) onUpdateValuePerRequest(val);
+                    setIsEditingValue(false);
+                  } else if (e.key === 'Escape') {
+                    setIsEditingValue(false);
+                  }
+                }}
+                className="w-16 bg-surface border border-accent text-accent font-bold px-1 py-0.5 rounded text-xs focus:outline-none"
+                autoFocus
+              />
+              <span className="text-[10px] text-accent">↵</span>
+            </div>
+          ) : (
+            <>
+              <span
+                className={`font-bold tabular-nums ${
+                  cumulativeMoneyLostInr > 0 ? 'text-status-failing' : 'text-text-muted'
+                }`}
+              >
+                ₹ {Math.round(cumulativeMoneyLostInr).toLocaleString('en-IN')}
+              </span>
+              <span className="text-[10px] text-text-dim">lost</span>
+              <span className="text-[9px] text-accent/70 hover:text-accent ml-0.5" title="Gross Merchandise Value per transaction">(₹{valuePerRequestInr})</span>
+            </>
+          )}
         </div>
 
         {/* Resilience Ring */}
