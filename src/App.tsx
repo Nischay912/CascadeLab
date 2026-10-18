@@ -8,6 +8,8 @@ import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
 import { analyzeSimulationIncident } from './analysis';
+import { BreakItModal, DefendItModal, DemoDirectorOverlay } from './demo';
+import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
 
 export const App: React.FC = () => {
   const {
@@ -41,6 +43,11 @@ export const App: React.FC = () => {
 
   const [isPresenterMode, setIsPresenterMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isBreakItOpen, setIsBreakItOpen] = useState(false);
+  const [isDefendItOpen, setIsDefendItOpen] = useState(false);
+  const [isDirectorOpen, setIsDirectorOpen] = useState(false);
+  const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
+  const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
 
   // Compute live architecture lint report
   const lintReport = useMemo(() => runLinter(currentSpec), [currentSpec]);
@@ -67,7 +74,7 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isRunning, speed, stepForward]);
 
-  // Global hotkeys: Space (Play/Pause), R (Reset), 1, 2, 3 (Speed), P (Presenter Mode)
+  // Global hotkeys: Space (Play/Pause), R (Reset), 1, 2, 3 (Speed), P (Presenter), D (Director), Escape (Panic Reset)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -86,11 +93,21 @@ export const App: React.FC = () => {
         setSpeed(16);
       } else if (e.key === 'p' || e.key === 'P') {
         setIsPresenterMode((prev) => !prev);
+      } else if (e.key === 'd' || e.key === 'D') {
+        setIsDirectorOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        // Panic Reset: clears all active faults and returns to clean shopfast state
+        loadTemplate('shopfast');
+        resetSimulation();
+        setIsBreakItOpen(false);
+        setIsDefendItOpen(false);
+        setIsDirectorOpen(false);
+        setIsPostmortemOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleRunning, resetSimulation, setSpeed]);
+  }, [toggleRunning, resetSimulation, setSpeed, loadTemplate]);
 
   // Dynamic Root Cause & Pattern Analysis Engine
   const rootCause = useMemo(() => {
@@ -144,11 +161,18 @@ export const App: React.FC = () => {
         onSelectScenario={handleScenarioChange}
         resilienceScore={resilienceScore}
         onAutoHarden={handleAutoHarden}
-        onOpenBreakIt={() => alert('Break It! game will open')}
-        onOpenPostmortem={() => alert('Postmortem generator will open')}
-        onOpenRealityCheck={() => alert('Reality check comparison')}
+        onOpenBreakIt={() => setIsBreakItOpen(true)}
+        onOpenPostmortem={() => {
+          const report = generatePostmortem(currentSpec, history);
+          setPostmortemData(report);
+          setIsPostmortemOpen(true);
+        }}
+        onOpenRealityCheck={() => alert('Reality Check module is in tab.')}
         isPresenterMode={isPresenterMode}
-        onTogglePresenterMode={() => setIsPresenterMode(!isPresenterMode)}
+        onTogglePresenterMode={() => {
+          setIsPresenterMode((prev) => !prev);
+          setIsDirectorOpen((prev) => !prev);
+        }}
         userSuccessRate={currentMetrics?.userSuccessRate}
         userP95Ms={currentMetrics?.userP95Ms}
         cumulativeMoneyLostInr={currentMetrics?.cumulativeMoneyLostInr}
@@ -174,8 +198,8 @@ export const App: React.FC = () => {
               setWorkloadPattern(w);
               runSimulationBatch(currentSpec, 180, seed);
             }}
-            onOpenBreakIt={() => alert('Break It! Game selected')}
-            onOpenDefendIt={() => alert('Defend It! Game selected')}
+            onOpenBreakIt={() => setIsBreakItOpen(true)}
+            onOpenDefendIt={() => setIsDefendItOpen(true)}
           />
         )}
 
@@ -211,6 +235,31 @@ export const App: React.FC = () => {
         currentMetrics={currentMetrics}
         history={history}
       />
+
+      {/* Phase 10 Interactive Modals & Demo Director */}
+      <BreakItModal
+        isOpen={isBreakItOpen}
+        onClose={() => setIsBreakItOpen(false)}
+      />
+
+      <DefendItModal
+        isOpen={isDefendItOpen}
+        onClose={() => setIsDefendItOpen(false)}
+      />
+
+      <DemoDirectorOverlay
+        isActive={isDirectorOpen}
+        onClose={() => setIsDirectorOpen(false)}
+        onSelectTab={() => {}}
+      />
+
+      {postmortemData && (
+        <PostmortemModal
+          postmortem={postmortemData}
+          isOpen={isPostmortemOpen}
+          onClose={() => setIsPostmortemOpen(false)}
+        />
+      )}
     </div>
   );
 };
