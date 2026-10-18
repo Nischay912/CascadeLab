@@ -6,7 +6,18 @@ import { generateChaosScenarios, evaluateChaosScenario } from '../chaos/suite';
  * Used during greedy forward selection and genetic algorithm iterations to evaluate
  * hundreds of candidates in under 100ms.
  */
-export function evaluateFastResilienceScore(spec: ArchitectureSpec): number {
+export interface FastSuiteReport {
+  resilienceScore: number;
+  scenarioResults: {
+    scenarioId: string;
+    scenarioName: string;
+    score: number;
+    avgSuccessPct: number;
+    moneyLostInr: number;
+  }[];
+}
+
+export function runFastResilienceSuite(spec: ArchitectureSpec): FastSuiteReport {
   const allScenarios = generateChaosScenarios(spec);
 
   // Pick 5-6 highest-leverage representative scenarios:
@@ -29,6 +40,7 @@ export function evaluateFastResilienceScore(spec: ArchitectureSpec): number {
   let totalWeight = 0;
   let weightedScoreSum = 0;
   let worstCaseScore = 100;
+  const scenarioResults: FastSuiteReport['scenarioResults'] = [];
 
   for (const sc of scenariosToRun) {
     // 50-second fast simulation window (incident [15, 35), recovery [35, 50))
@@ -38,9 +50,25 @@ export function evaluateFastResilienceScore(spec: ArchitectureSpec): number {
     if (res.score < worstCaseScore) {
       worstCaseScore = res.score;
     }
+    scenarioResults.push({
+      scenarioId: sc.id,
+      scenarioName: sc.name,
+      score: res.score,
+      avgSuccessPct: Math.round(res.avgSuccessDuringIncident * 1000) / 10,
+      moneyLostInr: res.moneyLostInr,
+    });
   }
 
   const weightedMean = totalWeight > 0 ? weightedScoreSum / totalWeight : 100;
   // Proposal §3.5 C: composite = 0.7 * weightedMean + 0.3 * worstCase
-  return Math.max(0, Math.min(100, Math.round(0.7 * weightedMean + 0.3 * worstCaseScore)));
+  const resilienceScore = Math.max(0, Math.min(100, Math.round(0.7 * weightedMean + 0.3 * worstCaseScore)));
+
+  return {
+    resilienceScore,
+    scenarioResults,
+  };
+}
+
+export function evaluateFastResilienceScore(spec: ArchitectureSpec): number {
+  return runFastResilienceSuite(spec).resilienceScore;
 }
