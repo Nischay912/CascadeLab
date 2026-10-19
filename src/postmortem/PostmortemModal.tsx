@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { PostmortemData } from './types';
 import { exportPostmortemToMarkdown } from './markdown';
+import { generatePrintableHtml } from './print';
 
 interface PostmortemModalProps {
   postmortem: PostmortemData;
@@ -49,7 +50,33 @@ export const PostmortemModal: React.FC<PostmortemModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    const html = generatePrintableHtml(postmortem);
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      iframe.contentWindow?.focus();
+      setTimeout(() => {
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 2000);
+      }, 250);
+    } else {
+      window.print();
+    }
   };
 
   const getSeverityBadge = () => {
