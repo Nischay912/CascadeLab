@@ -76,6 +76,9 @@ export const App: React.FC = () => {
     typeof window !== 'undefined' ? window.innerWidth : 1920
   );
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
+  const [activeCanvasTab, setActiveCanvasTab] = useState<
+    'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality'
+  >('graph');
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -348,7 +351,7 @@ export const App: React.FC = () => {
           setPostmortemData(report);
           setIsPostmortemOpen(true);
         }}
-        onOpenRealityCheck={() => alert('Reality Check module is in tab.')}
+        onOpenRealityCheck={() => setActiveCanvasTab('reality')}
         isPresenterMode={isPresenterMode}
         onTogglePresenterMode={() => {
           setIsPresenterMode((prev) => !prev);
@@ -480,6 +483,8 @@ export const App: React.FC = () => {
             onSelectEdge={(edgeId) => selectElement('edge', edgeId)}
             selectedNodeId={null}
             isSidebarOpen={!isLeftRail}
+            activeTab={activeCanvasTab}
+            onTabChange={setActiveCanvasTab}
           />
 
           {/* Floating drawer toggle button for screens < 1440px */}

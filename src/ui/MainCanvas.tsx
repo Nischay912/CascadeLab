@@ -19,16 +19,29 @@ interface MainCanvasProps {
   onSelectEdge: (edgeId: string) => void;
   selectedNodeId: string | null;
   isSidebarOpen?: boolean;
+  activeTab?: 'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality';
+  onTabChange?: (tab: 'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality') => void;
 }
 
 export const MainCanvas: React.FC<MainCanvasProps> = ({
   onSelectNode,
   onSelectEdge,
   isSidebarOpen,
+  activeTab: externalTab,
+  onTabChange: externalTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<
+  const [internalTab, setInternalTab] = useState<
     'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality'
   >('graph');
+
+  const activeTab = externalTab ?? internalTab;
+  const setActiveTab = (t: 'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality') => {
+    if (externalTabChange) {
+      externalTabChange(t);
+    } else {
+      setInternalTab(t);
+    }
+  };
 
   return (
     <main className="flex-1 min-w-0 flex flex-col h-full bg-background relative overflow-hidden select-none">
@@ -41,7 +54,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
             { id: 'optimizer', label: 'Auto-Harden', icon: Sparkles },
             { id: 'chaos', label: 'Chaos Matrix', icon: Grid },
             { id: 'capacity', label: 'Capacity Cliff', icon: TrendingDown },
-            { id: 'reality', label: 'Model Consistency', icon: Layers },
+            { id: 'reality', label: 'Reality Check', icon: Layers },
           ].map((tab) => (
             <button
               key={tab.id}
