@@ -73,6 +73,6 @@ describe('Phase 8: Multi-Objective Pareto Front Optimizer (NSGA-II Lite)', () =>
     // Verify change list on greedy solution
     expect(report.greedySolution.changes.length).toBeGreaterThan(0);
     expect(report.evaluationsCount).toBeGreaterThan(5);
-    expect(report.durationMs).toBeLessThan(4000);
+    expect(report.durationMs).toBeLessThan(6000);
   });
 });

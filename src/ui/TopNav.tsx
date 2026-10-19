@@ -28,7 +28,7 @@ interface TopNavProps {
   onSelectScenario: (scenarioKey: string) => void;
   onAutoHarden: () => void;
   onOpenBreakIt: () => void;
-  onOpenDefendIt: () => void;
+  onOpenDefendIt?: () => void;
   onOpenPostmortem: () => void;
   onOpenRealityCheck: () => void;
   isPresenterMode?: boolean;
@@ -314,6 +314,15 @@ export const TopNav: React.FC<TopNavProps> = ({
           >
             <Flame className="w-4 h-4" />
           </button>
+          {onOpenDefendIt && (
+            <button
+              onClick={onOpenDefendIt}
+              title="Defend It! (Live Incident Commander Game)"
+              className="p-1.5 rounded hover:bg-surface-hover text-emerald-400 hover:text-white transition-colors"
+            >
+              <ShieldAlert className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onOpenPostmortem}
             title="Generate SRE Postmortem"

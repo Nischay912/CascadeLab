@@ -262,7 +262,7 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           </div>
           {/* Sparkline */}
           <div className="w-20 h-6 flex-shrink-0">
-            <svg className="w-full h-full overflow-visible">
+            <svg viewBox="0 0 100 24" className="w-full h-full">
               <path
                 d={successPath}
                 fill="none"
@@ -297,7 +297,7 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           </div>
           {/* Sparkline */}
           <div className="w-20 h-6 flex-shrink-0">
-            <svg className="w-full h-full overflow-visible">
+            <svg viewBox="0 0 100 24" className="w-full h-full">
               <path
                 d={latencyPath}
                 fill="none"
@@ -334,7 +334,7 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           </div>
           {/* Sparkline */}
           <div className="w-20 h-6 flex-shrink-0">
-            <svg className="w-full h-full overflow-visible">
+            <svg viewBox="0 0 100 24" className="w-full h-full">
               <path
                 d={rpsPath}
                 fill="none"
@@ -363,7 +363,7 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           </div>
           {/* Sparkline */}
           <div className="w-20 h-6 flex-shrink-0">
-            <svg className="w-full h-full overflow-visible">
+            <svg viewBox="0 0 100 24" className="w-full h-full">
               <path d={activePath} fill="none" stroke="#34D399" strokeWidth="1.5" />
             </svg>
           </div>

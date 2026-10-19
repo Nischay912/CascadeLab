@@ -5,7 +5,7 @@ import {
   getBezierPath,
   EdgeProps,
 } from '@xyflow/react';
-import { ShieldCheck, ShieldAlert, RotateCw, AlertCircle } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import { EdgeSpec } from '../schema/architecture';
 
 export interface TrafficEdgeData {

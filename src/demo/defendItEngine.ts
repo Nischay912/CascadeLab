@@ -129,8 +129,8 @@ function buildDisasterSpec(): ArchitectureSpec {
       type: 'latency',
       target: 'payment-provider',
       factor: 5,
-      start_s: 20,
-      end_s: 75,
+      start_s: 2,
+      end_s: 85,
     },
   ];
   return spec;
@@ -155,10 +155,10 @@ export function evaluateDefendItRun(playerMoveIds: string[]): DefendItResult {
   const playerFinal = playerTicks[playerTicks.length - 1];
 
   let sumSuccess = 0;
-  for (let t = 20; t < 75; t++) {
+  for (let t = 2; t < 80; t++) {
     sumSuccess += playerTicks[t].gatewayAcceptanceRate ?? playerTicks[t].userSuccessRate;
   }
-  const playerSuccessRate = Math.round((sumSuccess / 55) * 10) / 10;
+  const playerSuccessRate = Math.round((sumSuccess / 78) * 10) / 10;
   const sloAchieved = playerSuccessRate >= 85.0;
 
   let stars: 1 | 2 | 3 = 1;
@@ -181,10 +181,10 @@ export function evaluateDefendItRun(playerMoveIds: string[]): DefendItResult {
   const autoEngine = new SimulationEngine(autoSpec, 42);
   const autoTicks = autoEngine.runBatch(90);
   let autoSum = 0;
-  for (let t = 20; t < 75; t++) {
+  for (let t = 2; t < 80; t++) {
     autoSum += autoTicks[t].gatewayAcceptanceRate ?? autoTicks[t].userSuccessRate;
   }
-  const autoHardenSuccessRate = Math.round((autoSum / 55) * 10) / 10;
+  const autoHardenSuccessRate = Math.round((autoSum / 78) * 10) / 10;
 
   // 3. Build diagnostic commentary
   let commentary = '';

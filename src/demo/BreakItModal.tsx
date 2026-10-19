@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Flame,
   X,
@@ -13,15 +13,31 @@ import {
   evaluateBreakItRun,
   getLeaderboard,
   saveLeaderboardScore,
+  resetLeaderboard,
 } from './breakItEngine';
 import { BreakItScore } from './types';
+
+export interface BreakItInitialResult {
+  destructionScore: number;
+  moneyLostInr: number;
+  blastRadiusPct: number;
+  selectedCards?: string[];
+  playerName?: string;
+}
 
 interface BreakItModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLaunchLiveBattle?: (cards: string[], playerName: string) => void;
+  initialResult?: BreakItInitialResult | null;
 }
 
-export const BreakItModal: React.FC<BreakItModalProps> = ({ isOpen, onClose }) => {
+export const BreakItModal: React.FC<BreakItModalProps> = ({
+  isOpen,
+  onClose,
+  onLaunchLiveBattle,
+  initialResult,
+}) => {
   const currentSpec = useArchitectureStore((state) => state.currentSpec);
 
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
@@ -33,6 +49,23 @@ export const BreakItModal: React.FC<BreakItModalProps> = ({ isOpen, onClose }) =
   } | null>(null);
   const [leaderboard, setLeaderboard] = useState<BreakItScore[]>(() => getLeaderboard());
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialResult) {
+      setResult({
+        destructionScore: initialResult.destructionScore,
+        moneyLostInr: initialResult.moneyLostInr,
+        blastRadiusPct: initialResult.blastRadiusPct,
+      });
+      if (initialResult.selectedCards) {
+        setSelectedCards(initialResult.selectedCards);
+      }
+      if (initialResult.playerName) {
+        setPlayerName(initialResult.playerName);
+      }
+      setLeaderboard(getLeaderboard());
+    }
+  }, [initialResult, isOpen]);
 
   if (!isOpen) return null;
 
@@ -211,17 +244,33 @@ export const BreakItModal: React.FC<BreakItModalProps> = ({ isOpen, onClose }) =
                 </button>
               )}
 
+              {onLaunchLiveBattle && (
+                <button
+                  onClick={() => onLaunchLiveBattle(selectedCards, playerName)}
+                  disabled={selectedCards.length === 0}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2 rounded-lg text-xs font-bold shadow-lg transition-all ${
+                    selectedCards.length === 0
+                      ? 'bg-surface-raised text-text-muted cursor-not-allowed border border-border'
+                      : 'bg-gradient-to-r from-rose-500 to-amber-500 hover:brightness-110 text-white shadow-[0_0_20px_rgba(244,63,94,0.4)] active:scale-95 animate-pulse'
+                  }`}
+                  title="Unleash selected disasters onto the live animated architecture graph!"
+                >
+                  <Flame className="w-4 h-4 fill-current" />
+                  <span>Launch Live Battle on Canvas!</span>
+                </button>
+              )}
+
               <button
                 onClick={handleLaunchAttack}
                 disabled={selectedCards.length === 0 || isSimulating}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2 rounded-lg text-xs font-bold shadow-noc transition-all ${
+                className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border border-border transition-all ${
                   selectedCards.length === 0 || isSimulating
                     ? 'bg-surface-raised text-text-muted cursor-not-allowed'
-                    : 'bg-rose-500 hover:bg-rose-600 text-white animate-pulse'
+                    : 'bg-surface hover:bg-surface-hover text-text-primary'
                 }`}
+                title="Calculate destruction score headlessly"
               >
-                <Flame className="w-4 h-4 fill-current" />
-                <span>{isSimulating ? 'Simulating Cascade...' : 'Launch Chaos Attack!'}</span>
+                <span>{isSimulating ? 'Simulating...' : 'Quick Score'}</span>
               </button>
             </div>
           </div>
@@ -264,10 +313,23 @@ export const BreakItModal: React.FC<BreakItModalProps> = ({ isOpen, onClose }) =
 
           {/* Leaderboard Table */}
           <div className="bg-surface border border-border rounded-xl p-4 shadow-noc">
-            <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span>Hall of Chaos Leaderboard</span>
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Hall of Chaos Leaderboard</span>
+              </h3>
+              <button
+                onClick={() => {
+                  const reset = resetLeaderboard();
+                  setLeaderboard(reset);
+                }}
+                className="text-[10px] text-text-dim hover:text-text-primary flex items-center gap-1 font-mono transition-colors"
+                title="Reset Leaderboard to default SRE engineers"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset Leaderboard</span>
+              </button>
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">

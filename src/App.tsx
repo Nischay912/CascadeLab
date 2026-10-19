@@ -9,7 +9,22 @@ import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
 import { analyzeSimulationIncident } from './analysis';
 import { evaluateFastResilienceScore } from './optimizer/fastSuite';
-import { BreakItModal, DefendItModal, DemoDirectorOverlay } from './demo';
+import {
+  BreakItModal,
+  BreakItInitialResult,
+  DefendItModal,
+  DemoDirectorOverlay,
+  LiveBattleHUD,
+  LiveBattleState,
+  AVAILABLE_CHAOS_CARDS,
+  DEFEND_IT_MOVES,
+  evaluateBreakItRun,
+  evaluateDefendItRun,
+  saveLeaderboardScore,
+  BreakItScore,
+  DefendItResult,
+} from './demo';
+import { shopFastNaiveTemplate } from './schema/templates';
 import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
 import { ShieldAlert } from 'lucide-react';
 
@@ -35,10 +50,12 @@ export const App: React.FC = () => {
     selectedScenario,
     initializeSimulation,
     runSimulationBatch,
+    startLiveBattle,
     setCurrentTime,
     setSpeed,
     setScenario,
     toggleRunning,
+    pauseSimulation,
     stepForward,
     resetSimulation,
   } = useSimulationStore();
@@ -51,6 +68,10 @@ export const App: React.FC = () => {
   const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
   const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [liveBattle, setLiveBattle] = useState<LiveBattleState | null>(null);
+  const [breakItInitialResult, setBreakItInitialResult] = useState<BreakItInitialResult | null>(null);
+  const [defendItInitialResult, setDefendItInitialResult] = useState<DefendItResult | null>(null);
+  const [defendItInitialMoves, setDefendItInitialMoves] = useState<string[]>([]);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1920
   );
@@ -69,18 +90,17 @@ export const App: React.FC = () => {
   // Compute live architecture lint report
   const lintReport = useMemo(() => runLinter(currentSpec), [currentSpec]);
   const [findings, setFindings] = useState<LintFinding[]>(lintReport.findings);
-  const [resilienceScore, setResilienceScore] = useState<number>(lintReport.staticResilienceScore);
 
-  // Keep findings and score synced whenever currentSpec changes
+  // Keep findings synced whenever currentSpec changes
   useEffect(() => {
     setFindings(lintReport.findings);
-    setResilienceScore(lintReport.staticResilienceScore);
   }, [lintReport]);
 
-  // Initialize simulation batch when spec or seed changes
+  // Initialize simulation batch when spec or seed changes (skip if battle is active)
   useEffect(() => {
+    if (liveBattle) return;
     initializeSimulation(currentSpec, seed);
-  }, [currentSpec, seed, initializeSimulation]);
+  }, [currentSpec, seed, liveBattle, initializeSimulation]);
 
   // Playback timer tick loop
   useEffect(() => {
@@ -151,7 +171,6 @@ export const App: React.FC = () => {
     setTimeout(() => {
       const rep = runLinter(currentSpec);
       setFindings(rep.findings);
-      setResilienceScore(rep.staticResilienceScore);
       setIsAnalyzing(false);
     }, 400);
   };
@@ -172,6 +191,135 @@ export const App: React.FC = () => {
     },
     [setScenario, currentSpec]
   );
+
+  const handleLaunchBreakItLive = (selectedCards: string[], playerName: string) => {
+    const cloned = JSON.parse(JSON.stringify(currentSpec));
+    cloned.faults = [];
+    for (const cId of selectedCards) {
+      const card = AVAILABLE_CHAOS_CARDS.find((c) => c.id === cId);
+      if (card) card.applyFault(cloned);
+    }
+    setSpec(cloned);
+    setIsBreakItOpen(false);
+    setLiveBattle({
+      mode: 'break_it',
+      cards: selectedCards,
+      playerName,
+    });
+    // Immediately launch live battle running at 2x speed for 90s duration
+    startLiveBattle(cloned, 90, 2);
+  };
+
+  const handleLaunchDefendItLive = (selectedMoves: string[]) => {
+    const disaster = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    disaster.workload.pattern = 'spike';
+    disaster.workload.multiplier = 2.5;
+    disaster.faults = [
+      {
+        type: 'latency',
+        target: 'payment-provider',
+        factor: 5,
+        start_s: 2,
+        end_s: 85,
+      },
+    ];
+    for (const mId of selectedMoves) {
+      const move = DEFEND_IT_MOVES.find((m) => m.id === mId);
+      if (move) move.applyMove(disaster);
+    }
+    setSpec(disaster);
+    setIsDefendItOpen(false);
+    setLiveBattle({
+      mode: 'defend_it',
+      deployedMoves: selectedMoves,
+    });
+    // Immediately launch live defense running at 2x speed for 90s duration
+    startLiveBattle(disaster, 90, 2);
+  };
+
+  const handleFinishBattle = (finalMetrics?: any) => {
+    if (!liveBattle) return;
+    if (liveBattle.mode === 'break_it') {
+      // Calculate final score using the real simulation physics engine
+      const evalRes = evaluateBreakItRun(currentSpec, liveBattle.cards || []);
+      const moneyLost = Math.max(evalRes.moneyLostInr, finalMetrics?.peakMoneyLost || 0);
+      const blastRadius = Math.max(evalRes.blastRadiusPct, finalMetrics?.peakBlastRadius || 0);
+      const destructionScore = Math.max(
+        evalRes.destructionScore,
+        Math.round((moneyLost / 1000) * 1.5 + blastRadius * 2.0)
+      );
+
+      const newScore: BreakItScore = {
+        id: `score-${Date.now()}`,
+        playerName: liveBattle.playerName?.trim() || 'Guest Judge',
+        destructionScore,
+        moneyLostInr: moneyLost,
+        blastRadiusPct: blastRadius,
+        cardsUsed: liveBattle.cards || [],
+        date: new Date().toISOString().split('T')[0],
+      };
+      saveLeaderboardScore(newScore);
+
+      // Populate result report in modal so user sees full destruction score & leaderboard
+      setBreakItInitialResult({
+        destructionScore,
+        moneyLostInr: moneyLost,
+        blastRadiusPct: blastRadius,
+        selectedCards: liveBattle.cards || [],
+        playerName: liveBattle.playerName || 'Guest Judge',
+      });
+      setLiveBattle(null);
+      pauseSimulation();
+      setIsBreakItOpen(true);
+    } else {
+      const allMoves = Array.from(
+        new Set([...(liveBattle.deployedMoves || []), ...(finalMetrics?.deployedMoves || [])])
+      );
+      const evalRes = evaluateDefendItRun(allMoves);
+      setDefendItInitialResult(evalRes);
+      setDefendItInitialMoves(allMoves);
+      setLiveBattle(null);
+      pauseSimulation();
+      setIsDefendItOpen(true);
+    }
+  };
+
+  const handleCancelBattle = () => {
+    // Abort battle: completely reset canvas back to clean normal baseline (Image 4/5)
+    loadTemplate('shopfast');
+    setScenario('baseline', shopFastNaiveTemplate);
+    initializeSimulation(shopFastNaiveTemplate, 42);
+    resetSimulation();
+    setSpeed(1);
+    setLiveBattle(null);
+  };
+
+  const handleCloseBreakIt = () => {
+    setIsBreakItOpen(false);
+    // If closing after battle completed, restore clean baseline so canvas is calm
+    if (breakItInitialResult) {
+      loadTemplate('shopfast');
+      setScenario('baseline', shopFastNaiveTemplate);
+      initializeSimulation(shopFastNaiveTemplate, 42);
+      resetSimulation();
+      setSpeed(1);
+      setBreakItInitialResult(null);
+    }
+  };
+
+  const handleCloseDefendIt = () => {
+    setIsDefendItOpen(false);
+    // If closing after defense drill completed, restore clean baseline
+    if (defendItInitialResult) {
+      loadTemplate('shopfast');
+      setScenario('baseline', shopFastNaiveTemplate);
+      initializeSimulation(shopFastNaiveTemplate, 42);
+      resetSimulation();
+      setSpeed(1);
+      setDefendItInitialResult(null);
+      setDefendItInitialMoves([]);
+    }
+  };
 
   return (
     <div
@@ -194,6 +342,7 @@ export const App: React.FC = () => {
         resilienceScore={chaosResilienceScore}
         onAutoHarden={handleAutoHarden}
         onOpenBreakIt={() => setIsBreakItOpen(true)}
+        onOpenDefendIt={() => setIsDefendItOpen(true)}
         onOpenPostmortem={() => {
           const report = generatePostmortem(currentSpec, history);
           setPostmortemData(report);
@@ -247,7 +396,7 @@ export const App: React.FC = () => {
             <div className="flex flex-col">
               <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">Ingress Load</span>
               <span className="text-2xl font-bold font-mono text-accent tabular-nums">
-                {Math.round(currentMetrics?.ingressRps ?? 600)} <span className="text-sm font-normal text-text-dim">RPS</span>
+                {Math.round(currentMetrics?.entryRps ?? 600)} <span className="text-sm font-normal text-text-dim">RPS</span>
               </span>
             </div>
             <div className="flex flex-col">
@@ -391,15 +540,29 @@ export const App: React.FC = () => {
         history={history}
       />
 
+      {/* Live Arcade Battle / Incident Commander HUD */}
+      {liveBattle && (
+        <LiveBattleHUD
+          battle={liveBattle}
+          onFinishBattle={handleFinishBattle}
+          onCancelBattle={handleCancelBattle}
+        />
+      )}
+
       {/* Phase 10 Interactive Modals & Demo Director */}
       <BreakItModal
         isOpen={isBreakItOpen}
-        onClose={() => setIsBreakItOpen(false)}
+        onClose={handleCloseBreakIt}
+        onLaunchLiveBattle={handleLaunchBreakItLive}
+        initialResult={breakItInitialResult}
       />
 
       <DefendItModal
         isOpen={isDefendItOpen}
-        onClose={() => setIsDefendItOpen(false)}
+        onClose={handleCloseDefendIt}
+        onLaunchLiveDefense={handleLaunchDefendItLive}
+        initialResult={defendItInitialResult}
+        initialMoves={defendItInitialMoves}
       />
 
       <DemoDirectorOverlay

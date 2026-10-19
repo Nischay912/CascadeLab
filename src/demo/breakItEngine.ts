@@ -16,8 +16,8 @@ export const AVAILABLE_CHAOS_CARDS: ChaosCard[] = [
         type: 'kill_instances',
         target: 'orders-db',
         percentage: 100,
-        start_s: 20,
-        end_s: 70,
+        start_s: 2,
+        end_s: 85,
       });
     },
   },
@@ -32,8 +32,8 @@ export const AVAILABLE_CHAOS_CARDS: ChaosCard[] = [
         type: 'latency',
         target: 'payment-provider',
         factor: 5,
-        start_s: 20,
-        end_s: 70,
+        start_s: 2,
+        end_s: 85,
       });
     },
   },
@@ -59,8 +59,8 @@ export const AVAILABLE_CHAOS_CARDS: ChaosCard[] = [
         type: 'az_outage',
         zone: 'a',
         target: 'all',
-        start_s: 20,
-        end_s: 70,
+        start_s: 2,
+        end_s: 85,
       });
     },
   },
@@ -75,8 +75,8 @@ export const AVAILABLE_CHAOS_CARDS: ChaosCard[] = [
         type: 'cache_flush',
         target: 'cache',
         warm_time_s: 30,
-        start_s: 20,
-        end_s: 60,
+        start_s: 2,
+        end_s: 85,
       });
     },
   },
@@ -91,8 +91,8 @@ export const AVAILABLE_CHAOS_CARDS: ChaosCard[] = [
         type: 'brownout',
         target: 'gateway',
         percentage: 40,
-        start_s: 20,
-        end_s: 70,
+        start_s: 2,
+        end_s: 85,
       });
     },
   },
@@ -200,7 +200,18 @@ export function getLeaderboard(): BreakItScore[] {
 
 export function saveLeaderboardScore(score: BreakItScore): BreakItScore[] {
   const current = getLeaderboard();
-  const updated = [...current, score];
+  const existingIdx = current.findIndex(
+    (e) => e.playerName.trim().toLowerCase() === score.playerName.trim().toLowerCase()
+  );
+  let updated: BreakItScore[];
+  if (existingIdx >= 0) {
+    if (score.destructionScore >= current[existingIdx].destructionScore) {
+      current[existingIdx] = score;
+    }
+    updated = [...current];
+  } else {
+    updated = [...current, score];
+  }
   updated.sort((a, b) => b.destructionScore - a.destructionScore);
   const trimmed = updated.slice(0, 10);
   try {
@@ -209,4 +220,13 @@ export function saveLeaderboardScore(score: BreakItScore): BreakItScore[] {
     // Ignore storage quota
   }
   return trimmed;
+}
+
+export function resetLeaderboard(): BreakItScore[] {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage quota
+  }
+  return DEFAULT_LEADERBOARD;
 }

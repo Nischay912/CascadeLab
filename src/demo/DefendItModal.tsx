@@ -14,20 +14,40 @@ import { DefendItResult } from './types';
 interface DefendItModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLaunchLiveDefense?: (selectedMoves: string[]) => void;
+  initialResult?: DefendItResult | null;
+  initialMoves?: string[];
 }
 
-export const DefendItModal: React.FC<DefendItModalProps> = ({ isOpen, onClose }) => {
+export const DefendItModal: React.FC<DefendItModalProps> = ({
+  isOpen,
+  onClose,
+  onLaunchLiveDefense,
+  initialResult,
+  initialMoves,
+}) => {
   const [selectedMoves, setSelectedMoves] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState<number>(90);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
   const [result, setResult] = useState<DefendItResult | null>(null);
 
   useEffect(() => {
+    if (initialResult) {
+      setResult(initialResult);
+      if (initialMoves) {
+        setSelectedMoves(initialMoves);
+      }
+    }
+  }, [initialResult, initialMoves, isOpen]);
+
+  useEffect(() => {
     if (!isOpen) {
-      setSelectedMoves([]);
-      setTimeLeft(90);
-      setIsTimerRunning(true);
-      setResult(null);
+      if (!initialResult) {
+        setSelectedMoves([]);
+        setTimeLeft(90);
+        setIsTimerRunning(true);
+        setResult(null);
+      }
       return;
     }
 
@@ -190,19 +210,30 @@ export const DefendItModal: React.FC<DefendItModalProps> = ({ isOpen, onClose })
                 })}
               </div>
 
-              {/* Submit Button */}
-              <div className="pt-2 flex items-center justify-end">
+              {/* Submit Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                {onLaunchLiveDefense && (
+                  <button
+                    onClick={() => onLaunchLiveDefense(selectedMoves)}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 animate-pulse"
+                    title="Launch live defense drill on the canvas to watch graph heal in real time!"
+                  >
+                    <ShieldCheck className="w-4 h-4 fill-current" />
+                    <span>Launch Live Defense on Canvas (60s)</span>
+                  </button>
+                )}
+
                 <button
                   onClick={handleDeployDefenses}
                   disabled={selectedMoves.length === 0}
-                  className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold shadow-noc transition-all ${
+                  className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold border transition-all ${
                     selectedMoves.length === 0
-                      ? 'bg-surface-raised text-text-muted cursor-not-allowed'
-                      : 'bg-emerald-500 hover:bg-emerald-600 text-background font-bold shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                      ? 'bg-surface-raised text-text-muted border-border cursor-not-allowed'
+                      : 'bg-surface hover:bg-surface-hover text-text-primary border-border'
                   }`}
+                  title="Evaluate defense moves headlessly"
                 >
-                  <ShieldCheck className="w-4 h-4 fill-current" />
-                  <span>Deploy Selected Defenses ({selectedMoves.length}/3)</span>
+                  <span>Quick Evaluate</span>
                 </button>
               </div>
             </div>

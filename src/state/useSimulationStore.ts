@@ -8,7 +8,8 @@ export type ScenarioType =
   | 'provider_latency'
   | 'az_outage'
   | 'cache_flush'
-  | 'gray_failure';
+  | 'gray_failure'
+  | 'custom';
 
 interface SimulationState {
   currentTime: number;
@@ -25,10 +26,12 @@ interface SimulationState {
   // Actions
   initializeSimulation: (spec: ArchitectureSpec, seed?: number) => void;
   runSimulationBatch: (spec: ArchitectureSpec, durationSeconds?: number, seed?: number) => void;
+  startLiveBattle: (spec: ArchitectureSpec, durationSeconds?: number, speed?: number) => void;
   setCurrentTime: (t: number) => void;
   setSpeed: (speed: number) => void;
   setScenario: (scenario: ScenarioType, spec: ArchitectureSpec) => void;
   toggleRunning: () => void;
+  pauseSimulation: () => void;
   stepForward: () => void;
   resetSimulation: () => void;
   toggleEffects: () => void;
@@ -113,6 +116,10 @@ export function applyScenarioToSpec(
         },
       ];
       break;
+
+    case 'custom':
+      // Preserve custom faults and workload as authored
+      break;
   }
 
   return cloned;
@@ -131,7 +138,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   effectsEnabled: true,
 
   initializeSimulation: (spec: ArchitectureSpec, seed = 42) => {
-    const { selectedScenario } = get();
+    const { selectedScenario, isRunning } = get();
     const effectiveSpec = applyScenarioToSpec(spec, selectedScenario);
     const engine = new SimulationEngine(effectiveSpec, seed);
     const history = engine.runBatch(180);
@@ -145,8 +152,30 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       history,
       currentMetrics: initialMetrics,
       currentTime: 0,
-      isRunning: false,
+      maxTime: 180,
+      isRunning,
       seed,
+      originNodeId,
+    });
+  },
+
+  startLiveBattle: (spec: ArchitectureSpec, durationSeconds = 90, speed = 2) => {
+    const engine = new SimulationEngine(spec, 42);
+    const history = engine.runBatch(durationSeconds);
+    const initialMetrics = history[0] || null;
+
+    const firstFault = spec.faults[0];
+    const originNodeId = firstFault ? (firstFault.target === 'all' ? null : firstFault.target) : null;
+
+    set({
+      selectedScenario: 'custom',
+      history,
+      currentMetrics: initialMetrics,
+      currentTime: 0,
+      maxTime: durationSeconds,
+      speed,
+      isRunning: true,
+      seed: 42,
       originNodeId,
     });
   },
@@ -183,6 +212,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       selectedScenario: scenario,
       history,
       currentTime: 0,
+      maxTime: 180,
       isRunning: false,
       currentMetrics: history[0] || null,
       originNodeId,
@@ -212,6 +242,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     }
   },
 
+  pauseSimulation: () => {
+    set({ isRunning: false });
+  },
+
   stepForward: () => {
     const { currentTime, maxTime, history } = get();
     if (currentTime < maxTime) {
@@ -229,6 +263,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const { history } = get();
     set({
       currentTime: 0,
+      maxTime: 180,
       isRunning: false,
       currentMetrics: history[0] || null,
     });
