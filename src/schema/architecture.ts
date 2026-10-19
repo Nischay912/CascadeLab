@@ -31,6 +31,7 @@ export const ServiceCrashSchema = z.object({
 export const ServiceSpecSchema = z.object({
   id: z.string().min(1),
   name: z.string().optional(),
+  displayName: z.string().optional(),
   role: z.string().optional(),
   entry: z.boolean().optional().default(false),
   instances: ServiceInstancesSchema,

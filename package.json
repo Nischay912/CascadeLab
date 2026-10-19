@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "guard": "tsx scripts/regressionGuard.ts",
     "ci:gate": "tsx scripts/ciResilienceGate.ts",
     "badge": "tsx scripts/generateBadge.ts"
   },

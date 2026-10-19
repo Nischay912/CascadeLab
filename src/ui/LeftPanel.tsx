@@ -101,7 +101,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   }
 
   return (
-    <aside className="w-80 bg-surface border-r border-border flex flex-col h-full select-none flex-shrink-0 z-20">
+    <aside className="w-[300px] bg-surface border-r border-border flex flex-col h-full select-none flex-shrink-0 z-20">
       {/* Panel Tab Switcher */}
       <div className="flex border-b border-border bg-surface-raised/50 items-center">
         <button

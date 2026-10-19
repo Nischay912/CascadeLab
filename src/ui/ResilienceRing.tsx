@@ -57,6 +57,7 @@ export const ResilienceRing: React.FC<ResilienceRingProps> = ({
 
   return (
     <div
+      data-testid="resilience-ring"
       className="flex items-center gap-2 group cursor-pointer flex-shrink-0"
       title={`Headline Score: Chaos Suite Resilience = ${clampedScore}/100\nComputed across the full chaos failure matrix (node outages, latency spikes, retry storms, AZ loss).`}
     >
@@ -95,7 +96,7 @@ export const ResilienceRing: React.FC<ResilienceRingProps> = ({
         </div>
       </div>
       {showLabel && (
-        <div className="flex flex-col text-left">
+        <div className="hidden min-[1680px]:flex flex-col text-left whitespace-nowrap">
           <span className="text-[10px] uppercase tracking-wider text-text-muted font-bold font-mono leading-tight">
             Chaos Suite
           </span>

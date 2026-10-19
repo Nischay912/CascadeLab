@@ -12,6 +12,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'gateway',
       name: 'API Gateway',
+      displayName: 'API Gateway',
       role: 'Entry Point & Routing',
       entry: true,
       instances: { initial: 4, min: 4, max: 12 },
@@ -27,6 +28,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'auth',
       name: 'Auth Service',
+      displayName: 'Auth Service',
       role: 'Token Verification',
       entry: false,
       instances: { initial: 3, min: 2, max: 8 },
@@ -42,6 +44,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'catalog',
       name: 'Catalog Service',
+      displayName: 'Catalog Service',
       role: 'Product Browsing',
       entry: false,
       instances: { initial: 4, min: 3, max: 10 },
@@ -57,6 +60,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'cart',
       name: 'Cart Service',
+      displayName: 'Cart Service',
       role: 'Basket Management',
       entry: false,
       instances: { initial: 3, min: 2, max: 8 },
@@ -72,6 +76,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'checkout',
       name: 'Checkout Service',
+      displayName: 'Checkout Service',
       role: 'Order Orchestration',
       entry: false,
       instances: { initial: 4, min: 4, max: 4 },
@@ -87,6 +92,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'payments',
       name: 'Payments Hub',
+      displayName: 'Payments Hub',
       role: 'Transaction Dispatcher',
       entry: false,
       instances: { initial: 3, min: 3, max: 3 },
@@ -102,6 +108,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'payment-provider',
       name: 'External Payment Gateway',
+      displayName: 'Payment GW',
       role: '3rd Party Provider (The Villain)',
       entry: false,
       instances: { initial: 2, min: 2, max: 2 }, // Fixed external capacity
@@ -117,6 +124,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'inventory',
       name: 'Inventory Service',
+      displayName: 'Inventory',
       role: 'Stock Reservation',
       entry: false,
       instances: { initial: 3, min: 2, max: 8 },
@@ -132,6 +140,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'recommender',
       name: 'Recommender Service',
+      displayName: 'Recommender',
       role: 'ML Suggestions (Non-critical)',
       entry: false,
       instances: { initial: 2, min: 2, max: 6 },
@@ -147,6 +156,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'notifications',
       name: 'Notification Queue',
+      displayName: 'Notification Queue',
       role: 'Async Email / SMS',
       entry: false,
       instances: { initial: 2, min: 2, max: 6 },
@@ -162,6 +172,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'cache',
       name: 'Redis Cache',
+      displayName: 'Redis Cache',
       role: 'In-Memory Store',
       entry: false,
       instances: { initial: 2, min: 2, max: 4 },
@@ -177,6 +188,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'products-db',
       name: 'Products Database',
+      displayName: 'Products DB',
       role: 'Catalog Data Store',
       entry: false,
       instances: { initial: 2, min: 2, max: 4 },
@@ -192,6 +204,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     {
       id: 'orders-db',
       name: 'Orders Database (SPOF)',
+      displayName: 'Orders DB (SPOF)',
       role: 'Transactional Store (Single Node)',
       entry: false,
       instances: { initial: 1, min: 1, max: 1 }, // Intentional SPOF

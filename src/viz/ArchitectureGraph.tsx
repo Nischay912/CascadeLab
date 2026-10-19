@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -17,6 +17,7 @@ import { TrafficEdge } from './TrafficEdge';
 import { ParticleCanvas } from './ParticleCanvas';
 import { useArchitectureStore } from '../state/useArchitectureStore';
 import { useSimulationStore } from '../state/useSimulationStore';
+import { computeGraphLayout } from './layout';
 import {
   Share2,
   Upload,
@@ -40,27 +41,85 @@ const edgeTypes = {
 const GraphCanvasInner: React.FC<{
   onSelectNode: (nodeId: string) => void;
   onSelectEdge: (edgeId: string) => void;
-}> = ({ onSelectNode, onSelectEdge }) => {
-  const { layout, currentSpec } = useArchitectureStore();
+  onOpenImport: () => void;
+  onOpenExport: () => void;
+  onOpenShare: () => void;
+  isSidebarOpen?: boolean;
+}> = ({ onSelectNode, onSelectEdge, onOpenImport, onOpenExport, onOpenShare, isSidebarOpen }) => {
+  const { currentSpec } = useArchitectureStore();
   const { currentMetrics, originNodeId, history, currentTime, effectsEnabled, toggleEffects } =
     useSimulationStore();
   const { fitView } = useReactFlow();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes as unknown as Node[]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges as unknown as Edge[]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastDimsRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  // Update layout positions when spec changes
-  useEffect(() => {
-    setNodes(layout.nodes as unknown as Node[]);
-    setEdges(layout.edges as unknown as Edge[]);
-    setTimeout(() => {
-      fitView({ padding: 0.06, duration: 400 });
-    }, 60);
-  }, [layout, fitView, setNodes, setEdges]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // Update node and edge metrics whenever simulation tick (currentMetrics) changes
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1920
+  );
+
   useEffect(() => {
-    // Build recent history slice for sparklines (last 8 ticks up to currentTime)
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMinimapVisible = windowWidth >= 1440;
+
+  // Recompute layout for container dimensions and center viewport using fitView
+  const updateLayoutForContainer = useCallback(
+    (availWidth: number, availHeight: number) => {
+      if (availWidth <= 100 || availHeight <= 100) return;
+      const computed = computeGraphLayout(currentSpec, { availWidth, availHeight });
+      setNodes(computed.nodes as unknown as Node[]);
+      setEdges(computed.edges as unknown as Edge[]);
+
+      setTimeout(() => {
+        fitView({ padding: 0.08, duration: 200 });
+      }, 50);
+    },
+    [currentSpec, setNodes, setEdges, fitView]
+  );
+
+  // ResizeObserver on the canvas container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (
+          Math.abs(width - lastDimsRef.current.w) > 5 ||
+          Math.abs(height - lastDimsRef.current.h) > 5
+        ) {
+          lastDimsRef.current = { w: width, h: height };
+          updateLayoutForContainer(width, height);
+        }
+      }
+    });
+
+    ro.observe(el);
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      lastDimsRef.current = { w: el.clientWidth, h: el.clientHeight };
+      updateLayoutForContainer(el.clientWidth, el.clientHeight);
+    }
+
+    return () => ro.disconnect();
+  }, [updateLayoutForContainer]);
+
+  // Update layout when spec changes
+  useEffect(() => {
+    if (lastDimsRef.current.w > 100 && lastDimsRef.current.h > 100) {
+      updateLayoutForContainer(lastDimsRef.current.w, lastDimsRef.current.h);
+    }
+  }, [currentSpec, updateLayoutForContainer]);
+
+  // Update node and edge metrics whenever simulation tick changes
+  useEffect(() => {
     const recentHistory = history.slice(Math.max(0, currentTime - 7), currentTime + 1);
 
     setNodes((prevNodes) =>
@@ -85,7 +144,12 @@ const GraphCanvasInner: React.FC<{
           status = 'crashed';
         } else if (crashedInstances > 0 || queue > 40 || utilPct >= 95 || successRate < 70) {
           status = 'failing';
-        } else if (utilPct >= 80 || queue > 15 || successRate < 95 || (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 35))) {
+        } else if (
+          utilPct >= 80 ||
+          queue > 15 ||
+          successRate < 95 ||
+          (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 35))
+        ) {
           status = 'degraded';
         } else if (svcMetrics?.cooldownTimer && svcMetrics.cooldownTimer > 0) {
           status = 'recovering';
@@ -122,7 +186,6 @@ const GraphCanvasInner: React.FC<{
     );
 
     setEdges((prevEdges) => {
-      // Find at most 3 priority edges (highest failure or highest load)
       const scored = prevEdges.map((edge) => {
         const edgeMetrics =
           currentMetrics?.edges[edge.id] ||
@@ -160,88 +223,131 @@ const GraphCanvasInner: React.FC<{
   }, [currentMetrics, originNodeId, history, currentTime, setNodes, setEdges]);
 
   return (
-    <div className="w-full h-full relative overflow-hidden">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
-        onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
-        minZoom={0.2}
-        maxZoom={2}
-        fitView
-        fitViewOptions={{ padding: 0.03 }}
-        className="bg-background"
+    <div className="w-full h-full flex flex-col overflow-hidden bg-background">
+      {/* Top Header Strip outside the ReactFlow canvas (data-testid="canvas-toolbar") */}
+      <div
+        data-testid="canvas-toolbar"
+        className="h-9 min-h-[36px] px-3 bg-surface border-b border-border flex items-center justify-between select-none z-10 flex-shrink-0 whitespace-nowrap overflow-hidden gap-2"
       >
-        <Background color="#1A243D" gap={20} size={1.5} />
-        <Controls className="!bg-surface-raised !border-border !fill-text-primary !shadow-noc [&>button]:!border-border [&>button]:!bg-surface [&>button]:!text-text-primary hover:[&>button]:!bg-surface-hover" />
-        <MiniMap
-          nodeColor={(node: any) => {
-            const status = node.data?.metrics?.status;
-            if (status === 'failing') return '#EF4444';
-            if (status === 'crashed') return '#6B7280';
-            if (status === 'degraded') return '#F59E0B';
-            if (status === 'recovering') return '#3B82F6';
-            return '#10B981';
-          }}
-          maskColor="rgba(11, 16, 32, 0.75)"
-          className="!bg-surface !border !border-border !rounded-lg overflow-hidden !shadow-noc"
-          zoomable
-          pannable
-        />
-      </ReactFlow>
+        {/* Left: Spec info + visual effects toggle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse flex-shrink-0" />
+            <span className="text-xs font-bold text-text-primary truncate max-w-[160px]">{currentSpec.name}</span>
+            <span className="text-xs text-text-dim font-mono hidden xl:inline flex-shrink-0">
+              ({currentSpec.services.length} services)
+            </span>
+          </div>
+          <button
+            onClick={toggleEffects}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-medium transition-all flex-shrink-0 whitespace-nowrap ${
+              effectsEnabled
+                ? 'bg-accent/20 border-accent/40 text-accent'
+                : 'bg-surface-raised border-border text-text-muted hover:text-text-primary'
+            }`}
+            title="Toggle 60 FPS Particle Flow & Failure Wave ripples"
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>{effectsEnabled ? 'Particles: ON' : 'Particles: OFF'}</span>
+          </button>
+        </div>
 
-      {/* 60 FPS HTML5 Canvas Overlay for Particles and Failure Wave ripples */}
-      <ParticleCanvas
-        nodes={nodes}
-        edges={edges}
-        currentMetrics={currentMetrics}
-        originNodeId={originNodeId}
-        effectsEnabled={effectsEnabled}
-      />
-
-      {/* Floating Architecture Info & Effect Toggle Pill */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
-        <div className="bg-surface/90 backdrop-blur border border-border px-2.5 py-1 rounded-lg shadow-noc pointer-events-none flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-status-healthy animate-pulse" />
-          <span className="text-xs font-bold text-text-primary">{currentSpec.name}</span>
-          <span className="text-xs text-text-dim font-mono hidden xl:inline">
-            ({currentSpec.services.length} services)
+        {/* Center: Canvas Legend (data-testid="canvas-legend") */}
+        <div
+          data-testid="canvas-legend"
+          className="hidden md:flex items-center gap-2 lg:gap-3 text-[11px] font-mono text-text-muted flex-shrink-0 whitespace-nowrap"
+        >
+          <span className="flex items-center gap-1 text-text-primary whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-status-healthy" /> Healthy
+          </span>
+          <span className="flex items-center gap-1 text-text-primary whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-traffic-retry" /> Retries
+          </span>
+          <span className="flex items-center gap-1 text-text-primary whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-status-degraded" /> Degraded
+          </span>
+          <span className="flex items-center gap-1 text-text-primary whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-status-failing" /> Failing
           </span>
         </div>
 
-        {/* Visual Effects Toggle */}
-        <button
-          onClick={toggleEffects}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border backdrop-blur text-xs font-medium transition-all shadow-noc ${
-            effectsEnabled
-              ? 'bg-accent/20 border-accent/40 text-accent'
-              : 'bg-surface/90 border-border text-text-muted hover:text-text-primary'
-          }`}
-          title="Toggle 60 FPS Particle Flow & Failure Wave ripples"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>{effectsEnabled ? 'Particles: ON' : 'Particles: OFF'}</span>
-        </button>
+        {/* Right: Import / Export / Share */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 pr-1">
+          <button
+            onClick={onOpenImport}
+            className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-surface-raised hover:bg-surface-hover border border-border text-[11px] font-medium text-text-primary rounded transition-colors whitespace-nowrap"
+            title="Import from docker-compose.yml, YAML, or JSON"
+          >
+            <Upload className="w-3.5 h-3.5 text-accent" />
+            {!isSidebarOpen && <span className="hidden sm:inline">Import</span>}
+          </button>
+          <button
+            onClick={onOpenExport}
+            className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-surface-raised hover:bg-surface-hover border border-border text-[11px] font-medium text-text-primary rounded transition-colors whitespace-nowrap"
+            title="Export architecture as YAML"
+          >
+            <Download className="w-3.5 h-3.5 text-accent" />
+            {!isSidebarOpen && <span className="hidden sm:inline">Export</span>}
+          </button>
+          <button
+            onClick={onOpenShare}
+            className={`flex items-center gap-1 py-0.5 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-[11px] font-medium text-accent rounded transition-colors whitespace-nowrap ${
+              isSidebarOpen ? 'px-2' : 'px-2 sm:px-2.5'
+            }`}
+            title="Share architecture via compressed URL"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            {!isSidebarOpen && <span>Share</span>}
+          </button>
+        </div>
       </div>
 
-      {/* Bottom-left Legend */}
-      <div className="absolute bottom-4 left-14 flex items-center gap-3 bg-surface/90 backdrop-blur border border-border px-3 py-1.5 rounded-lg shadow-noc text-xs z-10 font-mono">
-        <span className="flex items-center gap-1.5 text-text-primary">
-          <span className="w-2.5 h-2.5 rounded-full bg-status-healthy" /> Healthy
-        </span>
-        <span className="flex items-center gap-1.5 text-text-primary">
-          <span className="w-2.5 h-2.5 rounded-full bg-traffic-retry" /> Retry Wave
-        </span>
-        <span className="flex items-center gap-1.5 text-text-primary">
-          <span className="w-2.5 h-2.5 rounded-full bg-status-degraded" /> Degraded
-        </span>
-        <span className="flex items-center gap-1.5 text-text-primary">
-          <span className="w-2.5 h-2.5 rounded-full bg-status-failing" /> Failing / Down
-        </span>
+      {/* ReactFlow Canvas Container */}
+      <div ref={containerRef} className="flex-1 w-full h-full relative overflow-hidden">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodeClick={(_, node) => onSelectNode(node.id)}
+          onEdgeClick={(_, edge) => onSelectEdge(edge.id)}
+          minZoom={0.2}
+          maxZoom={2}
+          fitView
+          fitViewOptions={{ padding: 0.08 }}
+          className="bg-background"
+        >
+          <Background color="#1A243D" gap={20} size={1.5} />
+          <Controls className="!bg-surface-raised !border-border !fill-text-primary !shadow-noc [&>button]:!border-border [&>button]:!bg-surface [&>button]:!text-text-primary hover:[&>button]:!bg-surface-hover" />
+          {isMinimapVisible && (
+            <MiniMap
+              nodeColor={(node: any) => {
+                const status = node.data?.metrics?.status;
+                if (status === 'failing') return '#EF4444';
+                if (status === 'crashed') return '#6B7280';
+                if (status === 'degraded') return '#F59E0B';
+                if (status === 'recovering') return '#3B82F6';
+                return '#10B981';
+              }}
+              maskColor="rgba(11, 16, 32, 0.75)"
+              style={{ width: 160, height: 100 }}
+              className="!bg-surface !border !border-border !rounded-lg overflow-hidden !shadow-noc"
+              zoomable
+              pannable
+            />
+          )}
+        </ReactFlow>
+
+        {/* 60 FPS HTML5 Canvas Overlay for Particles and Failure Wave ripples */}
+        <ParticleCanvas
+          nodes={nodes}
+          edges={edges}
+          currentMetrics={currentMetrics}
+          originNodeId={originNodeId}
+          effectsEnabled={effectsEnabled}
+        />
       </div>
     </div>
   );
@@ -250,6 +356,7 @@ const GraphCanvasInner: React.FC<{
 export const ArchitectureGraph: React.FC<{
   onSelectNode: (nodeId: string) => void;
   onSelectEdge: (edgeId: string) => void;
+  isSidebarOpen?: boolean;
 }> = (props) => {
   const { currentSpec, importDockerCompose, importYamlOrJson } = useArchitectureStore();
   const [modalMode, setModalMode] = useState<'import' | 'export' | 'share' | null>(null);
@@ -315,44 +422,17 @@ services:
   return (
     <div className="w-full h-full relative">
       <ReactFlowProvider>
-        <GraphCanvasInner {...props} />
-      </ReactFlowProvider>
-
-      {/* Floating Toolbar: Import, Export, Share */}
-      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
-        <button
-          onClick={() => {
+        <GraphCanvasInner
+          {...props}
+          onOpenImport={() => {
             setInputText(sampleDockerCompose);
             setImportError(null);
             setModalMode('import');
           }}
-          className="flex items-center gap-1 px-2 py-1 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
-          title="Import from docker-compose.yml, YAML, or JSON"
-        >
-          <Upload className="w-3 h-3 text-accent" />
-          <span>Import</span>
-        </button>
-
-        <button
-          onClick={handleOpenExport}
-          className="flex items-center gap-1 px-2 py-1 bg-surface/90 hover:bg-surface-raised backdrop-blur border border-border text-xs font-medium text-text-primary rounded-md shadow-noc transition-colors"
-          title="Export architecture as YAML"
-        >
-          <Download className="w-3 h-3 text-accent" />
-          <span className="hidden xl:inline">Export YAML</span>
-          <span className="xl:hidden">Export</span>
-        </button>
-
-        <button
-          onClick={handleOpenShare}
-          className="flex items-center gap-1 px-2 py-1 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-xs font-medium text-accent rounded-md shadow-noc transition-colors"
-          title="Share architecture via compressed URL"
-        >
-          <Share2 className="w-3 h-3" />
-          <span className="hidden xl:inline">Share URL</span>
-          <span className="xl:hidden">Share</span>
-        </button>
-      </div>
+          onOpenExport={handleOpenExport}
+          onOpenShare={handleOpenShare}
+        />
+      </ReactFlowProvider>
 
       {/* Modal Dialog for Import / Export / Share */}
       {modalMode && (

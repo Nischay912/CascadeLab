@@ -11,6 +11,7 @@ import { analyzeSimulationIncident } from './analysis';
 import { evaluateFastResilienceScore } from './optimizer/fastSuite';
 import { BreakItModal, DefendItModal, DemoDirectorOverlay } from './demo';
 import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
+import { ShieldAlert } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -49,9 +50,21 @@ export const App: React.FC = () => {
   const [isDirectorOpen, setIsDirectorOpen] = useState(false);
   const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
   const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
-  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(
-    typeof window !== 'undefined' ? window.innerWidth < 1440 : false
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1920
   );
+  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isLeftRail = isLeftPanelCollapsed;
+  const isRightDrawerMode = windowWidth < 1440;
+  const rightWidthClass = windowWidth >= 1680 ? 'w-[380px]' : 'w-[360px]';
 
   // Compute live architecture lint report
   const lintReport = useMemo(() => runLinter(currentSpec), [currentSpec]);
@@ -285,10 +298,10 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Workspace: Left Panel + Center Canvas + Right Panel */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {!isPresenterMode && (
           <LeftPanel
-            isCollapsed={isLeftPanelCollapsed}
+            isCollapsed={isLeftRail}
             onToggleCollapse={() => setIsLeftPanelCollapsed((prev) => !prev)}
             onInjectFault={(f) => {
               addFault({
@@ -312,13 +325,29 @@ export const App: React.FC = () => {
         )}
 
         {/* Central Canvas with React Flow auto-layout + ParticleCanvas overlay */}
-        <MainCanvas
-          onSelectNode={(nodeId) => selectElement('service', nodeId)}
-          onSelectEdge={(edgeId) => selectElement('edge', edgeId)}
-          selectedNodeId={null}
-        />
+        <div className="flex-1 h-full relative overflow-hidden flex flex-col min-w-0">
+          <MainCanvas
+            onSelectNode={(nodeId) => selectElement('service', nodeId)}
+            onSelectEdge={(edgeId) => selectElement('edge', edgeId)}
+            selectedNodeId={null}
+            isSidebarOpen={!isLeftRail}
+          />
 
-        {!isPresenterMode && (
+          {/* Floating drawer toggle button for screens < 1440px */}
+          {isRightDrawerMode && !isPresenterMode && (
+            <button
+              onClick={() => setIsRightDrawerOpen((prev) => !prev)}
+              className="absolute right-3 top-12 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-raised border border-border shadow-noc hover:border-accent text-xs font-medium text-text-primary backdrop-blur"
+              title="Toggle Linter & Root-cause panel"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-accent" />
+              <span>{isRightDrawerOpen ? 'Close Panel' : 'Insights & Linter'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Normal RightPanel on >= 1440px */}
+        {!isPresenterMode && !isRightDrawerMode && (
           <RightPanel
             findings={findings}
             rootCause={rootCause}
@@ -326,7 +355,24 @@ export const App: React.FC = () => {
             onApplyFix={handleApplyFix}
             isAnalyzing={isAnalyzing}
             designScore={lintReport.staticResilienceScore}
+            widthClass={rightWidthClass}
           />
+        )}
+
+        {/* Slide-over Drawer RightPanel on < 1440px */}
+        {!isPresenterMode && isRightDrawerMode && isRightDrawerOpen && (
+          <div className="absolute right-0 top-0 bottom-0 z-40 shadow-2xl flex animate-in slide-in-from-right duration-200">
+            <RightPanel
+              findings={findings}
+              rootCause={rootCause}
+              onRunLinter={handleRunLinter}
+              onApplyFix={handleApplyFix}
+              isAnalyzing={isAnalyzing}
+              designScore={lintReport.staticResilienceScore}
+              widthClass="w-[360px]"
+              onCloseDrawer={() => setIsRightDrawerOpen(false)}
+            />
+          </div>
         )}
       </div>
 

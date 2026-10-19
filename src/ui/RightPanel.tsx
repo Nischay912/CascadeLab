@@ -43,6 +43,8 @@ interface RightPanelProps {
   onApplyFix: (findingId: string) => void;
   isAnalyzing: boolean;
   designScore?: number;
+  widthClass?: string;
+  onCloseDrawer?: () => void;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -52,6 +54,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onApplyFix,
   isAnalyzing,
   designScore,
+  widthClass = 'w-[360px]',
+  onCloseDrawer,
 }) => {
   const currentSpec = useArchitectureStore((state) => state.currentSpec);
   const simulationHistory = useSimulationStore((state) => state.history);
@@ -114,7 +118,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   };
 
   return (
-    <aside className="w-[330px] bg-surface border-l border-border flex flex-col h-full select-none flex-shrink-0 z-20">
+    <aside className={`${widthClass} bg-surface border-l border-border flex flex-col h-full select-none flex-shrink-0 z-20`}>
       {/* Top Section Switcher Tabs: Linter vs Root-Cause */}
       <div className="h-10 bg-surface-raised border-b border-border flex items-center px-2 gap-1.5 flex-shrink-0">
         <button
@@ -143,6 +147,16 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <span className="w-2 h-2 rounded-full bg-status-failing animate-pulse" />
           )}
         </button>
+
+        {onCloseDrawer && (
+          <button
+            onClick={onCloseDrawer}
+            className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface text-xs font-bold"
+            title="Close Drawer"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Tab 1: Architecture Linter (Full Height Scrollable) */}

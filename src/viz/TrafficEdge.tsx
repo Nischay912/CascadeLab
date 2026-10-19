@@ -51,7 +51,7 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
     circuitBreakerTimer: 0,
   };
 
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -86,8 +86,15 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
     ? '#22D3EE'
     : '#1F2A44';
 
-  // Show edge labels only on selection, hover, or at most 3 priority (busiest / failing) edges
+  // Show edge labels only on selection, hover, or priority (busiest / failing) edges
   const showLabel = selected || isHovered || Boolean(edgeData?.isPriorityLabel);
+
+  // Position label strictly within the inter-column corridor between source and target
+  const midX = (sourceX + targetX) * 0.5;
+  const midY = (sourceY + targetY) * 0.5;
+  const pillHalfWidth = 26;
+  const labelX = Math.max(sourceX + pillHalfWidth + 4, Math.min(targetX - pillHalfWidth - 4, midX));
+  const labelY = midY;
 
   return (
     <g
@@ -115,75 +122,45 @@ export const TrafficEdge: React.FC<EdgeProps> = ({
         }}
       />
 
-      {/* Edge pill label renderer (>= 12px font, non-overlapping, solid background) */}
+      {/* Edge pill label renderer (solid background, non-overlapping, >= 12px font) */}
       {showLabel && (
         <EdgeLabelRenderer>
           <div
+            data-testid="edge-label"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${Math.round(labelX)}px,${Math.round(labelY)}px)`,
               pointerEvents: 'all',
             }}
-            className={`flex items-center gap-1.5 backdrop-blur border px-2.5 py-1 rounded-md text-xs font-mono shadow-md cursor-pointer transition-all z-20 ${
+            className={`flex items-center gap-1 border px-1.5 py-0.5 rounded text-[12px] font-mono shadow-md cursor-pointer transition-all z-20 whitespace-nowrap leading-none ${
               selected
                 ? 'border-accent bg-surface-raised ring-2 ring-accent/40 z-30'
                 : isBreakerOpen
-                ? 'border-status-failing/80 bg-surface-raised/95 text-status-failing'
+                ? 'border-status-failing/80 bg-surface-raised text-status-failing'
                 : isRetryStorm
-                ? 'border-orange-500/60 bg-surface-raised/95 text-orange-400'
-                : 'border-border bg-surface-raised/95 hover:border-accent text-text-primary'
+                ? 'border-orange-500/60 bg-surface-raised text-orange-400'
+                : 'border-border bg-surface-raised hover:border-accent text-text-primary'
             }`}
             title={`${edgeSpec.from} → ${edgeSpec.to} | Mode: ${edgeSpec.mode} | Timeout: ${edgeSpec.timeout_ms}ms | Load: ${Math.round(metrics.effectiveRps)} RPS`}
           >
-            {/* Circuit Breaker status badge */}
             {isBreakerOpen ? (
-              <span className="flex items-center gap-1 text-status-failing font-bold animate-pulse">
+              <span className="flex items-center gap-1 text-status-failing font-bold animate-pulse text-[12px]">
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span>CB: OPEN ({metrics.circuitBreakerTimer}s)</span>
+                <span>CB OPEN</span>
               </span>
             ) : isBreakerHalfOpen ? (
-              <span className="flex items-center gap-1 text-status-degraded font-bold">
+              <span className="flex items-center gap-1 text-status-degraded font-bold text-[12px]">
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span>CB: HALF-OPEN</span>
+                <span>HALF-OPEN</span>
               </span>
-            ) : edgeSpec.circuit_breaker?.enabled ? (
-              <span title="Circuit Breaker Armed (Closed)">
-                <ShieldCheck className="w-3.5 h-3.5 text-status-healthy" />
-              </span>
-            ) : edgeSpec.critical && edgeSpec.retries > 1 ? (
-              <span title="Unprotected Critical Dependency (No Breaker)">
-                <AlertCircle className="w-3.5 h-3.5 text-orange-400" />
-              </span>
-            ) : null}
-
-            {/* Retry multiplier */}
-            {metrics.retryAttempts > 1.1 ? (
-              <span
-                className="flex items-center gap-1 text-orange-400 font-bold"
-                title={`${metrics.retryAttempts.toFixed(2)}x retry multiplier`}
-              >
-                <RotateCw className="w-3 h-3" />
-                <span>{metrics.retryAttempts.toFixed(1)}×</span>
-              </span>
-            ) : edgeSpec.retries > 0 ? (
-              <span className="text-text-muted" title={`Configured retries: ${edgeSpec.retries}`}>
-                r:{edgeSpec.retries}
-              </span>
-            ) : null}
-
-            {/* Failure rate percentage */}
-            {metrics.attemptFailureFraction > 0.05 && (
-              <span className="text-status-failing font-bold">
-                {Math.round(metrics.attemptFailureFraction * 100)}% fail
-              </span>
-            )}
-
-            {/* Throughput */}
-            {metrics.effectiveRps > 0 && (
-              <span className="text-text-primary font-bold tabular-nums">
-                {Math.round(metrics.effectiveRps)} RPS
+            ) : (
+              <span className="font-bold tabular-nums text-[12px]">
+                {metrics.retryAttempts > 1.2 ? `r:${metrics.retryAttempts.toFixed(1)} ` : ''}
+                {metrics.effectiveRps >= 1000
+                  ? `${(metrics.effectiveRps / 1000).toFixed(1)}k`
+                  : Math.round(metrics.effectiveRps)}
               </span>
             )}
           </div>

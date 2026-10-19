@@ -18,11 +18,13 @@ interface MainCanvasProps {
   onSelectNode: (nodeId: string) => void;
   onSelectEdge: (edgeId: string) => void;
   selectedNodeId: string | null;
+  isSidebarOpen?: boolean;
 }
 
 export const MainCanvas: React.FC<MainCanvasProps> = ({
   onSelectNode,
   onSelectEdge,
+  isSidebarOpen,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality'
@@ -63,6 +65,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({
           <ArchitectureGraph
             onSelectNode={onSelectNode}
             onSelectEdge={onSelectEdge}
+            isSidebarOpen={isSidebarOpen}
           />
         )}
 
