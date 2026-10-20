@@ -61,6 +61,7 @@ export function applyScenarioToSpec(
     case 'baseline':
       cloned.faults = [];
       cloned.workload.pattern = 'constant';
+      cloned.workload.multiplier = 1.0;
       break;
 
     case 'flash_sale':

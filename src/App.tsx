@@ -55,7 +55,6 @@ export const App: React.FC = () => {
     setSpeed,
     setScenario,
     toggleRunning,
-    pauseSimulation,
     stepForward,
     resetSimulation,
   } = useSimulationStore();
@@ -242,6 +241,12 @@ export const App: React.FC = () => {
 
   const handleFinishBattle = (finalMetrics?: any) => {
     if (!liveBattle) return;
+
+    const cleanSpec = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    cleanSpec.faults = [];
+    cleanSpec.workload.pattern = 'constant';
+    cleanSpec.workload.multiplier = 1.0;
+
     if (liveBattle.mode === 'break_it') {
       // Calculate final score using the real simulation physics engine
       const evalRes = evaluateBreakItRun(currentSpec, liveBattle.cards || []);
@@ -272,7 +277,12 @@ export const App: React.FC = () => {
         playerName: liveBattle.playerName || 'Guest Judge',
       });
       setLiveBattle(null);
-      pauseSimulation();
+      // Immediately reset background canvas to nominal peaceful baseline
+      setSpec(cleanSpec);
+      setScenario('baseline', cleanSpec);
+      initializeSimulation(cleanSpec, 42);
+      resetSimulation();
+      setSpeed(1);
       setIsBreakItOpen(true);
     } else {
       const allMoves = Array.from(
@@ -282,16 +292,25 @@ export const App: React.FC = () => {
       setDefendItInitialResult(evalRes);
       setDefendItInitialMoves(allMoves);
       setLiveBattle(null);
-      pauseSimulation();
+      // Immediately reset background canvas to nominal peaceful baseline
+      setSpec(cleanSpec);
+      setScenario('baseline', cleanSpec);
+      initializeSimulation(cleanSpec, 42);
+      resetSimulation();
+      setSpeed(1);
       setIsDefendItOpen(true);
     }
   };
 
   const handleCancelBattle = () => {
-    // Abort battle: completely reset canvas back to clean normal baseline (Image 4/5)
-    loadTemplate('shopfast');
-    setScenario('baseline', shopFastNaiveTemplate);
-    initializeSimulation(shopFastNaiveTemplate, 42);
+    // Abort battle: completely reset canvas back to clean normal baseline
+    const cleanSpec = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    cleanSpec.faults = [];
+    cleanSpec.workload.pattern = 'constant';
+    cleanSpec.workload.multiplier = 1.0;
+    setSpec(cleanSpec);
+    setScenario('baseline', cleanSpec);
+    initializeSimulation(cleanSpec, 42);
     resetSimulation();
     setSpeed(1);
     setLiveBattle(null);
@@ -300,28 +319,32 @@ export const App: React.FC = () => {
   const handleCloseBreakIt = () => {
     setIsBreakItOpen(false);
     // If closing after battle completed, restore clean baseline so canvas is calm
-    if (breakItInitialResult) {
-      loadTemplate('shopfast');
-      setScenario('baseline', shopFastNaiveTemplate);
-      initializeSimulation(shopFastNaiveTemplate, 42);
-      resetSimulation();
-      setSpeed(1);
-      setBreakItInitialResult(null);
-    }
+    const cleanSpec = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    cleanSpec.faults = [];
+    cleanSpec.workload.pattern = 'constant';
+    cleanSpec.workload.multiplier = 1.0;
+    setSpec(cleanSpec);
+    setScenario('baseline', cleanSpec);
+    initializeSimulation(cleanSpec, 42);
+    resetSimulation();
+    setSpeed(1);
+    setBreakItInitialResult(null);
   };
 
   const handleCloseDefendIt = () => {
     setIsDefendItOpen(false);
     // If closing after defense drill completed, restore clean baseline
-    if (defendItInitialResult) {
-      loadTemplate('shopfast');
-      setScenario('baseline', shopFastNaiveTemplate);
-      initializeSimulation(shopFastNaiveTemplate, 42);
-      resetSimulation();
-      setSpeed(1);
-      setDefendItInitialResult(null);
-      setDefendItInitialMoves([]);
-    }
+    const cleanSpec = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    cleanSpec.faults = [];
+    cleanSpec.workload.pattern = 'constant';
+    cleanSpec.workload.multiplier = 1.0;
+    setSpec(cleanSpec);
+    setScenario('baseline', cleanSpec);
+    initializeSimulation(cleanSpec, 42);
+    resetSimulation();
+    setSpeed(1);
+    setDefendItInitialResult(null);
+    setDefendItInitialMoves([]);
   };
 
   return (

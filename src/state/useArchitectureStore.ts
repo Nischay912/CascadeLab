@@ -48,10 +48,11 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
   loadTemplate: (templateKey: string) => {
     const template = TEMPLATES_CATALOG[templateKey];
     if (template) {
-      const layout = computeGraphLayout(template);
-      syncHashToUrl(template);
+      const cloned: ArchitectureSpec = JSON.parse(JSON.stringify(template));
+      const layout = computeGraphLayout(cloned);
+      syncHashToUrl(cloned);
       set({
-        currentSpec: template,
+        currentSpec: cloned,
         activeTemplateKey: templateKey,
         layout,
         selectedElementId: null,
@@ -160,6 +161,7 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
       workload: {
         ...currentSpec.workload,
         pattern,
+        multiplier: pattern === 'constant' ? 1.0 : pattern === 'flash_sale' ? 3.0 : currentSpec.workload.multiplier,
       },
     };
     syncHashToUrl(updatedSpec);
