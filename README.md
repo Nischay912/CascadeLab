@@ -6,7 +6,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%2019-61DAFB.svg?logo=react&logoColor=black)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind%20CSS-38BDF8.svg?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![React Flow](https://img.shields.io/badge/Canvas-React%20Flow-FF0072.svg)](https://reactflow.dev/)
-[![Vitest](https://img.shields.io/badge/Tests-71%2F71%20Passing-6E9F18.svg?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Tests-80%2F80%20Passing-6E9F18.svg?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![Resilience Gate](https://img.shields.io/badge/CI%20Resilience%20Gate-84%2F100%20Passed-10B981.svg)]()
 [![Empirical Fidelity](https://img.shields.io/badge/Empirical%20Fidelity-99.8%25%20(Grade%20A%2B)-38BDF8.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -40,7 +40,7 @@ Modern systems (fintech, UPI payment switches, quick-commerce, streaming, ride-h
 
 Engineers typically discover these dangerous feedback loops under maximum stress during flash sales, festival spikes, or product launches. Existing chaos testing tools require live, expensive, and risky cloud environments. Architecture diagrams in wikis are static and completely blind to runtime queueing dynamics.
 
-**CascadeLab brings resilience engineering to design time.** It is a 100% browser-based, zero-backend digital twin that executes deterministic queuing math, visualizes failure propagation in real time, diagnoses root causes, and automatically finds the cheapest architectural configuration to harden your system.
+**CascadeLab brings resilience engineering to design time and runtime.** It is a 100% browser-based, zero-backend digital twin that executes deterministic queuing math, visualizes failure propagation in real time, diagnoses root causes, automatically finds the cheapest architectural configuration to harden your system, and provides an **AI Autonomous Incident Commander** to self-heal running clusters in-flight.
 
 ---
 
@@ -66,9 +66,11 @@ flowchart TD
         ChaosSuite --> CapacityCliff["Knee-Point Breaking Capacity Sweep"]
         AnalysisEngine --> PostmortemGen["SRE Postmortem Generator (Markdown & PDF)"]
         StaticLinter & ChaosSuite --> Optimizer["Auto-Harden Optimizer (NSGA-II Lite Pareto Front)"]
+        Telemetry & AnalysisEngine --> AICommander["AI Autonomous Incident Commander (AIOps DEFCON Radar & In-Flight Self-Healing)"]
     end
 
     Optimizer --> SplitScreen["Deterministic Split-Screen Replay (Seed 42)"]
+    AICommander -->|In-Flight Countermeasures| Canvas
     Telemetry --> RealityCheck["Reality Check: Empirical Benchmarks vs Model"]
     StaticLinter & ChaosSuite --> CIGate["CLI Resilience Gate (scripts/ciResilienceGate.ts)"]
 ```
@@ -79,7 +81,7 @@ flowchart TD
 
 ### 1. 🗺️ Topological Canvas & 60 FPS Particle Flow
 * **Interactive Canvas:** Built with React Flow and `dagre` hierarchical layout. Drag, drop, connect, inspect, and tweak parameters in real time.
-* **Instant `docker-compose.yml` Import:** Paste standard Docker Compose files to automatically parse services, replica counts, and `depends_on` dependencies into an interactive graph.
+* **Instant `docker-compose.yml` & YAML Import:** Paste standard Docker Compose files or Kubernetes-style architecture specs to automatically parse services, replica counts, and `depends_on` dependencies into an interactive graph.
 * **Failure Wave Animation:** Real-time visual ripple that emanates from the root cause origin and expands across the graph in the exact chronological order that services degrade.
 * **Color-Coded Particle Flow:** Edge particles visually indicate traffic health:
   * **Cyan (`#22D3EE`):** Nominal forward traffic.
@@ -129,13 +131,28 @@ Scans topologies for known distributed systems anti-patterns before runtime:
 * **1-Click Architectural Diff:** Explains exactly what to change, why, the expected resilience gain, and the monthly cost impact.
 * **Split-Screen Replay:** Plays the identical disaster side-by-side (Before vs. After) with identical seed 42 to visually prove that the hardened configuration survives where the naive collapsed.
 
-### 6. 🎮 Interactive Chaos Games & Presenter Tour
+### 6. 🤖 AI Autonomous Incident Commander (AIOps Threat Radar & In-Flight Self-Healing)
+* **Live DEFCON Threat Radar:** Evaluates real-time health, escalating dynamically from `DEFCON 5` (Nominal Operations, $\ge 98\%$ success) to `DEFCON 1` (Critical SEV-1 System Blackout, $< 65\%$ success or multiple crashed replicas).
+* **Little's Law Runtime Anomaly Detector:** Traverses in-flight requests ($L = \lambda \cdot W$) to catch upstream caller worker pool exhaustion before cascading brownouts occur.
+* **Dual Operating Modes:**
+  * **Human Co-Pilot Mode:** Streams live tactical incident telemetry and prescribes 1-click countermeasures (*"Trip Circuit Breaker & Quench Retries"*), cleanly stabilizing the system at `00:00` with 100% green boxes.
+  * **Autonomous Auto-Pilot Mode:** Executes **in-flight self-healing** during live execution without stopping or rewinding time. Dynamically injects circuit breakers, randomized exponential jitter backoff, horizontal pod burst scaling (+4 replicas), and adaptive load shedding, slashing P95 latency from 3,000ms to 150ms and saving over ₹57 Lakhs in business loss.
+* **Live Cybernetic HUD Toast:** Flashes in-flight tactical execution notifications right on the canvas (`🤖 [AUTO-PILOT ACTIVE]`) so operators can track AI decisions in real time.
+* **Tactical Incident Stream:** Streaming terminal console detailing root cause culprits, blast radius percentages, and audit logs.
+
+### 7. 🎮 Interactive Chaos Games & Presenter Tour
 * **"Break It!" Challenge:** Players get a 100-pt Chaos Budget to trigger disaster attack cards within 30 seconds to maximize blast radius and monetary loss on a local leaderboard.
 * **"Defend It!" Challenge:** An incident is live (5x payment latency + 2.5x traffic surge). Players get 90 seconds and 3 defensive SRE moves to restore the SLO, comparing their choices against Auto-Harden AI.
 * **Demo Director Mode:** 6-step guided executive tour with on-screen narrations and auto-run steps.
-* **Panic Reset:** Pressing `Escape` instantly stops all faults, resets state, and reloads clean baseline architecture.
+* **Presenter Mode (`P`):** Hides sidebars and scales fonts 1.5× for 5-meter projector readability.
+* **Panic Reset (`Escape`):** Instantly stops all faults, wipes in-memory mitigations, closes modals, and reloads the clean, fragile baseline architecture.
 
-### 7. 🧪 Empirical Reality Check (Validation against Physical Systems)
+### 8. 💼 Enterprise Architecture Management & Economics
+* **One-Click Architecture Deletion:** Compact deletion control with safe confirmation modal to prune custom and imported topologies from persistent browser storage.
+* **Live GMV / Value per Request Editor:** Clickable transaction value ($₹/\text{request}$) right in the top navigation bar to model custom enterprise Gross Merchandise Value and compute bespoke outage financial losses.
+* **Local Persistence:** Retains custom architectures across browser sessions in local storage.
+
+### 9. 🧪 Empirical Reality Check (Validation against Physical Systems)
 * **Mini-Stack Benchmark:** 3-tier microservice stack (`Gateway -> Core API -> Database`) validated against recorded physical Node.js benchmarks.
 * **4 Physical Scenarios:**
   1. *Baseline Nominal Operation* (80 RPS, healthy, 99.8% fidelity)
@@ -144,7 +161,7 @@ Scans topologies for known distributed systems anti-patterns before runtime:
   4. *5× Dependency Latency with Circuit Breaker* (fast-fail latency drop, 99.3% fidelity)
 * **Overall Empirical Fidelity:** **99.8% (Grade A+)** across success rate, throughput, and p95 latency.
 
-### 8. 🚦 Standalone CI/CD Resilience Gate CLI
+### 10. 🚦 Standalone CI/CD Resilience Gate CLI
 * Evaluates architecture specs directly in terminal or pull request pipelines (`npm run ci:gate`).
 * Fails pull requests if resilience score drops below threshold or if critical linter errors exist.
 
@@ -186,11 +203,13 @@ Guarantees inventory balance between arrival rate $\lambda$, average system time
 | **Bundler** | Vite 6 | Sub-second HMR and optimized static production bundling |
 | **Canvas** | React Flow (`@xyflow/react`) | Highly customizable node/edge rendering with custom SVG particles |
 | **Layout** | Dagre | Automated hierarchical Left-to-Right graph layout |
-| **State** | Zustand | Decoupled lightweight stores for simulation, architecture, and UI |
+| **State** | Zustand | Decoupled lightweight stores for simulation, architecture, commander, and UI |
 | **Validation** | Zod | Runtime schema validation for YAML, JSON, and Docker Compose |
 | **Styling** | Tailwind CSS | Dark mission-control NOC aesthetic (`#0B1020`) with custom design tokens |
 | **Engine** | Web Workers + Mulberry32 | Off-main-thread deterministic simulation (Seed 42) |
-| **Testing** | Vitest | Fast test runner validating queueing math, linter, chaos, and games |
+| **AIOps Engine** | Custom Autonomous Pipeline | Little's Law anomaly detection and dynamic in-flight self-healing |
+| **Icons** | Lucide React | High-contrast cybernetic iconography |
+| **Testing** | Vitest (80/80 Passing) | Fast test runner validating queueing math, linter, chaos, optimizer, and commander |
 | **CLI Gate** | TypeScript (`tsx`) | CI/CD resilience gate for automated pull request checks |
 
 ---
@@ -210,6 +229,7 @@ cascadelab/
 │   ├── ciResilienceGate.ts     # Standalone CI/CD resilience gate CLI
 │   └── generateBadge.ts        # SVG README badge generator
 ├── src/
+│   ├── commander/              # AI Autonomous Incident Commander, DEFCON engine, HUD & toast
 │   ├── schema/                 # Zod validation schemas, templates & Compose parser
 │   ├── sim/                    # Fluid simulation engine, mulberry32 PRNG, queue math
 │   ├── lint/                   # 16-rule architecture linter & graph articulation analyzer
@@ -224,7 +244,7 @@ cascadelab/
 │   ├── ui/                     # NOC TopNav, LeftPanel, RightPanel, BottomTimeline, MainCanvas
 │   └── state/                  # Zustand stores & URL hash synchronizer
 └── tests/
-    ├── unit/                   # Schema validation and skeleton tests
+    ├── unit/                   # Schema validation, skeleton, and AI commander tests
     └── validation/             # Engine, mechanisms, visual, linter, chaos, optimizer, postmortem, demo, reality, ciGate
 ```
 
@@ -249,7 +269,7 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Run All 71 Verification Tests
+### Run All 80 Verification Tests
 ```bash
 npm test
 ```
@@ -276,16 +296,16 @@ The compiled output in `dist/` can be served from any static host (GitHub Pages,
 
 ## ⌨️ Presenter & Keyboard Shortcuts
 
-| Shortcut | Action |
-|---|---|
-| `Space` | Play / Pause simulation |
-| `R` | Reset simulation time to $t = 0\text{ s}$ |
-| `D` | Toggle Demo Director Presenter Mode |
-| `Escape` | **Panic Reset:** Closes modals, resets simulation, reloads clean architecture |
-| `1` | Set playback speed to $1\times$ |
-| `2` | Set playback speed to $4\times$ |
-| `3` | Set playback speed to $16\times$ |
-| `Ctrl + K` / `Cmd + K` | Open command palette |
+| Shortcut | Action | What It Does |
+|---|---|---|
+| `Space` | Play / Pause | Starts or freezes simulation time |
+| `R` | Rewind Time | Returns timeline clock to $t = 00:00$ (Leaves current architecture intact) |
+| `Escape` | **🔥 Panic Reset** | **Wipes in-memory mitigations, closes modals, and reloads clean ShopFast baseline (Score: ~30)** |
+| `P` | Presenter Mode | Hides sidebars, scales typography 1.5× for 5-meter projector readability |
+| `D` | Demo Director | Toggles guided interactive presentation overlay |
+| `1` | 1× Speed | Sets playback speed to real-time $1\times$ |
+| `2` | 4× Speed | Sets playback speed to fast $4\times$ |
+| `3` | 16× Speed | Sets playback speed to ultra-fast $16\times$ |
 
 ---
 
