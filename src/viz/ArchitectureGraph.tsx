@@ -30,6 +30,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { exportArchitectureToYaml } from '../schema/importers';
+import { PromptArchitectureModal } from '../generator/PromptArchitectureModal';
 
 const nodeTypes = {
   serviceNode: ServiceNode,
@@ -45,8 +46,17 @@ const GraphCanvasInner: React.FC<{
   onOpenImport: () => void;
   onOpenExport: () => void;
   onOpenShare: () => void;
+  onOpenPromptModal?: () => void;
   isSidebarOpen?: boolean;
-}> = ({ onSelectNode, onSelectEdge, onOpenImport, onOpenExport, onOpenShare, isSidebarOpen }) => {
+}> = ({
+  onSelectNode,
+  onSelectEdge,
+  onOpenImport,
+  onOpenExport,
+  onOpenShare,
+  onOpenPromptModal,
+  isSidebarOpen,
+}) => {
   const { currentSpec } = useArchitectureStore();
   const { currentMetrics, originNodeId, history, currentTime, effectsEnabled, toggleEffects } =
     useSimulationStore();
@@ -256,7 +266,9 @@ const GraphCanvasInner: React.FC<{
         {/* Center: Canvas Legend (data-testid="canvas-legend") */}
         <div
           data-testid="canvas-legend"
-          className="hidden md:flex items-center gap-2 lg:gap-3 text-[11px] font-mono text-text-muted flex-shrink-0 whitespace-nowrap"
+          className={`${
+            isSidebarOpen ? 'hidden xl:flex' : 'hidden md:flex'
+          } items-center gap-2 lg:gap-3 text-[11px] font-mono text-text-muted flex-shrink-0 whitespace-nowrap`}
         >
           <span className="flex items-center gap-1 text-text-primary whitespace-nowrap">
             <span className="w-2 h-2 rounded-full bg-status-healthy" /> Healthy
@@ -272,8 +284,20 @@ const GraphCanvasInner: React.FC<{
           </span>
         </div>
 
-        {/* Right: Import / Export / Share */}
+        {/* Right: AI Prompt / Import / Export / Share */}
         <div className="flex items-center gap-1.5 flex-shrink-0 pr-1">
+          {onOpenPromptModal && (
+            <button
+              onClick={onOpenPromptModal}
+              className={`flex items-center gap-1 py-0.5 bg-gradient-to-r from-cyan-500/20 via-sky-500/20 to-purple-500/20 hover:from-cyan-500/30 hover:to-purple-500/30 border border-cyan-500/40 text-[11px] font-semibold text-cyan-300 rounded shadow-[0_0_12px_rgba(6,182,212,0.25)] transition-all whitespace-nowrap active:scale-95 group ${
+                isSidebarOpen ? 'px-1.5 sm:px-2' : 'px-2 sm:px-2.5'
+              }`}
+              title="Prompt-to-Architecture Natural Language Topology Generator"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse group-hover:rotate-12 transition-transform" />
+              {!isSidebarOpen && <span>AI Prompt</span>}
+            </button>
+          )}
           <button
             onClick={onOpenImport}
             className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 bg-surface-raised hover:bg-surface-hover border border-border text-[11px] font-medium text-text-primary rounded transition-colors whitespace-nowrap"
@@ -361,6 +385,7 @@ export const ArchitectureGraph: React.FC<{
 }> = (props) => {
   const { currentSpec, importDockerCompose, importYamlOrJson } = useArchitectureStore();
   const [modalMode, setModalMode] = useState<'import' | 'export' | 'share' | null>(null);
+  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [inputText, setInputText] = useState('');
   const [copied, setCopied] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -879,8 +904,15 @@ services:
           }}
           onOpenExport={handleOpenExport}
           onOpenShare={handleOpenShare}
+          onOpenPromptModal={() => setIsPromptModalOpen(true)}
         />
       </ReactFlowProvider>
+
+      {/* Prompt-to-Architecture Natural Language Generator Modal */}
+      <PromptArchitectureModal
+        isOpen={isPromptModalOpen}
+        onClose={() => setIsPromptModalOpen(false)}
+      />
 
       {/* Modal Dialog for Import / Export / Share */}
       {modalMode && (

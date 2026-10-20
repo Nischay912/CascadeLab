@@ -75,6 +75,7 @@ interface ArchitectureState {
   setSpec: (spec: ArchitectureSpec) => void;
   importDockerCompose: (yamlStr: string) => void;
   importYamlOrJson: (text: string) => void;
+  deploySynthesizedArchitecture: (spec: ArchitectureSpec) => void;
   selectElement: (type: 'service' | 'edge' | null, id: string | null) => void;
   updateService: (serviceId: string, updates: Partial<ServiceSpec>) => void;
   removeService: (serviceId: string) => void;
@@ -239,6 +240,8 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     });
   },
 
+
+
   importYamlOrJson: (text: string) => {
     const spec = parseArchitectureYamlOrJson(text);
     const layout = computeGraphLayout(spec);
@@ -247,6 +250,42 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     const { customArchitectures } = get();
     const id = `custom_${Date.now()}`;
     const name = spec.name || 'Imported Architecture';
+    const entry: CustomArchitectureEntry = {
+      id,
+      name,
+      spec,
+      source: 'yaml',
+      importedAt: Date.now(),
+    };
+
+    const existingIndex = customArchitectures.findIndex((c) => c.name === name);
+    let updatedList: CustomArchitectureEntry[];
+    if (existingIndex >= 0) {
+      updatedList = [...customArchitectures];
+      entry.id = customArchitectures[existingIndex].id;
+      updatedList[existingIndex] = entry;
+    } else {
+      updatedList = [entry, ...customArchitectures];
+    }
+    persistCustomArchitectures(updatedList);
+
+    set({
+      customArchitectures: updatedList,
+      currentSpec: spec,
+      activeTemplateKey: entry.id,
+      layout,
+      selectedElementId: null,
+      selectedElementType: null,
+    });
+  },
+
+  deploySynthesizedArchitecture: (spec: ArchitectureSpec) => {
+    const layout = computeGraphLayout(spec);
+    syncHashToUrl(spec);
+
+    const { customArchitectures } = get();
+    const id = `custom_ai_${Date.now()}`;
+    const name = spec.name || 'AI Synthesized Architecture';
     const entry: CustomArchitectureEntry = {
       id,
       name,
