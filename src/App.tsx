@@ -31,7 +31,7 @@ import { useCommanderStore } from './commander/useCommanderStore';
 import { evaluateIncidentCommander, formatMissionTime } from './commander/engine';
 import { CommanderMitigation } from './commander/types';
 import { AICommanderModal } from './commander/AICommanderModal';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, Bot } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
@@ -102,6 +102,10 @@ export const App: React.FC = () => {
 
   const lastAutonomousExecutionRef = useRef<number>(-1);
   const skipReinitRef = useRef<boolean>(false);
+  const [autoPilotNotification, setAutoPilotNotification] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -217,6 +221,7 @@ export const App: React.FC = () => {
     // Reset autonomous execution timestamp when simulation rewinds to 0
     if (currentTime === 0) {
       lastAutonomousExecutionRef.current = -1;
+      setAutoPilotNotification(null);
     }
 
     // Auto-Pilot Autonomous Self-Healing Directive
@@ -233,6 +238,16 @@ export const App: React.FC = () => {
       setSpec(updated);
       runSimulationBatch(updated, 180, seed);
       recordMitigationApplied();
+      
+      const mitigationTitle = evaluation.prescribedMitigation.title;
+      setAutoPilotNotification({
+        title: mitigationTitle,
+        message: 'In-flight resilience countermeasure deployed. Mitigated bottleneck and restored SLO.',
+      });
+      setTimeout(() => {
+        setAutoPilotNotification((prev) => (prev?.title === mitigationTitle ? null : prev));
+      }, 4500);
+
       addLogs([
         {
           id: `auto_${Date.now()}`,
@@ -670,6 +685,35 @@ export const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Floating Auto-Pilot Active Interventions Banner */}
+      {autoPilotNotification && (
+        <div className="fixed top-14 right-6 z-50 flex items-center gap-3 bg-[#0B1020]/95 border border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.4)] px-4 py-3 rounded-lg backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center flex-shrink-0 animate-pulse">
+            <Bot className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="max-w-[340px]">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-cyan-400 bg-cyan-500/15 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                Auto-Pilot Active
+              </span>
+              <span className="text-xs font-bold text-white truncate" title={autoPilotNotification.title}>
+                {autoPilotNotification.title}
+              </span>
+            </div>
+            <p className="text-[11px] text-text-muted mt-0.5 leading-tight">
+              {autoPilotNotification.message}
+            </p>
+          </div>
+          <button
+            onClick={() => setAutoPilotNotification(null)}
+            className="text-text-muted hover:text-white ml-2 text-xs transition-colors p-1"
+            title="Dismiss notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Bottom Telemetry & Timeline Scrubber */}
       <BottomTimeline
