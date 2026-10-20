@@ -15,6 +15,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { useArchitectureStore } from '../state/useArchitectureStore';
 
@@ -41,7 +42,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     selectedElementId,
     selectedElementType,
     updateService,
+    removeService,
     updateEdge,
+    removeEdge,
   } = useArchitectureStore();
 
   const selectedService =
@@ -349,6 +352,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                         className="w-4 h-4 accent-accent rounded cursor-pointer"
                       />
                     </div>
+
+                    {/* Delete Service Action */}
+                    <div className="pt-2 border-t border-border/80">
+                      <button
+                        onClick={() => removeService(selectedService.id)}
+                        disabled={currentSpec.services.length <= 1}
+                        className="w-full py-1.5 px-2 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Remove service and its connected dependency calls from architecture"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Service</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -437,6 +453,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                         }
                         className="w-4 h-4 accent-accent rounded cursor-pointer"
                       />
+                    </div>
+
+                    {/* Delete Edge Action */}
+                    <div className="pt-2 border-t border-border/80">
+                      <button
+                        onClick={() =>
+                          removeEdge(selectedEdge.id || `${selectedEdge.from}->${selectedEdge.to}`)
+                        }
+                        className="w-full py-1.5 px-2 rounded bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+                        title="Disconnect this dependency call edge"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Dependency Edge</span>
+                      </button>
                     </div>
                   </div>
                 </div>

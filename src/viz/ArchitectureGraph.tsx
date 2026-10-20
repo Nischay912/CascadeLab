@@ -27,6 +27,7 @@ import {
   Check,
   X,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { exportArchitectureToYaml } from '../schema/importers';
 
@@ -363,6 +364,9 @@ export const ArchitectureGraph: React.FC<{
   const [inputText, setInputText] = useState('');
   const [copied, setCopied] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [activeSampleId, setActiveSampleId] = useState<
+    'yaml_boilerplate' | 'yaml_paynex' | 'compose_basic' | 'compose_fleet' | 'custom'
+  >('yaml_boilerplate');
 
   const handleOpenExport = () => {
     setInputText(exportArchitectureToYaml(currentSpec));
@@ -558,8 +562,219 @@ seed: 42
     []
   );
 
-  const sampleDockerCompose = useMemo(
+  const samplePayNexYaml = useMemo(
+    () => `# =========================================================================
+# PayNex: Enterprise UPI & Digital Payment Switch Network
+# =========================================================================
+name: "PayNex Payment Switch"
+description: "Core banking UPI / Card transaction switch with real-time ML fraud scoring and HSM encryption."
+
+slo:
+  success_pct: 99.9
+  p95_ms: 400
+
+value_per_request_inr: 120
+
+workload:
+  entry: "pay-gateway"
+  pattern: "diurnal"
+  base_rps: 750
+  multiplier: 1.5
+  duration_s: 180
+  ramp_time_s: 20
+
+services:
+  - id: "pay-gateway"
+    name: "Edge API Gateway"
+    role: "TLS Termination & Rate Limiter"
+    entry: true
+    position: { x: 80, y: 190 }
+    instances: { initial: 5, min: 3, max: 15 }
+    concurrency: 60
+    service_time_ms: 6
+    queue_limit: 300
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 3000
+    zone_spread: ["a", "b"]
+
+  - id: "auth-token-svc"
+    name: "Token Auth Vault"
+    role: "OAuth2 & API Key Verification"
+    position: { x: 380, y: 80 }
+    instances: { initial: 3, min: 2, max: 8 }
+    concurrency: 50
+    service_time_ms: 10
+    queue_limit: 200
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 2500
+    zone_spread: ["a", "b"]
+
+  - id: "switch-orchestrator"
+    name: "Payment Switch Core"
+    role: "Transaction Routing & State Machine"
+    position: { x: 380, y: 300 }
+    instances: { initial: 5, min: 3, max: 12 }
+    concurrency: 40
+    service_time_ms: 18
+    queue_limit: 250
+    load_shedding: { enabled: true, threshold: 0.80 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 4500
+    zone_spread: ["a", "b"]
+
+  - id: "fraud-engine"
+    name: "ML Fraud Engine"
+    role: "Velocity Check & Risk Scoring"
+    position: { x: 680, y: 40 }
+    instances: { initial: 4, min: 2, max: 10 }
+    concurrency: 35
+    service_time_ms: 32
+    queue_limit: 180
+    load_shedding: { enabled: true, threshold: 0.75 }
+    autoscale: { enabled: true, target_util: 0.60, eval_period_s: 10, startup_delay_s: 20, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 5500
+    zone_spread: ["a", "b"]
+
+  - id: "idempotency-cache"
+    name: "Idempotency Redis"
+    role: "Duplicate Request Deduplication"
+    position: { x: 680, y: 200 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 90
+    service_time_ms: 2
+    queue_limit: 600
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: false, target_util: 0.6, eval_period_s: 15, startup_delay_s: 45, cooldown_s: 120 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 2200
+    zone_spread: ["a", "b"]
+
+  - id: "account-ledger-db"
+    name: "Core Ledger DB"
+    role: "ACID Double-Entry PostgreSQL"
+    position: { x: 680, y: 360 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 45
+    service_time_ms: 14
+    queue_limit: 250
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 30, cooldown_s: 120 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 8000
+    zone_spread: ["a", "b"]
+
+  - id: "hsm-vault"
+    name: "HSM Crypto Enclave"
+    role: "PIN Encryption & Signature Verification"
+    position: { x: 980, y: 120 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 30
+    service_time_ms: 22
+    queue_limit: 150
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 7000
+    zone_spread: ["a", "b"]
+
+  - id: "clearing-network"
+    name: "National Clearing Switch"
+    role: "External Settlement Network (NPCI/Visa)"
+    position: { x: 980, y: 280 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 30
+    service_time_ms: 65
+    queue_limit: 150
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: false, target_util: 0.6, eval_period_s: 15, startup_delay_s: 45, cooldown_s: 120 }
+    crash: { enabled: false, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 0
+    zone_spread: ["a"]
+
+edges:
+  - from: "pay-gateway"
+    to: "auth-token-svc"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 300
+    retries: 2
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 25, max_delay_ms: 200 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "pay-gateway"
+    to: "switch-orchestrator"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 1200
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 50, max_delay_ms: 400 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.40, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "switch-orchestrator"
+    to: "fraud-engine"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: false
+    timeout_ms: 350
+    retries: 1
+    backoff: { mode: "fixed", jitter: true, base_delay_ms: 40, max_delay_ms: 100 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.30, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "switch-orchestrator"
+    to: "idempotency-cache"
+    calls_per_request: 1.5
+    mode: "sync"
+    critical: false
+    timeout_ms: 80
+    retries: 1
+    cache: { hit_ratio: 0.85, warm_time_s: 15 }
+
+  - from: "switch-orchestrator"
+    to: "account-ledger-db"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 600
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 30, max_delay_ms: 250 }
+    bulkhead_max_concurrent: 35
+
+  - from: "switch-orchestrator"
+    to: "hsm-vault"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 400
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 40, max_delay_ms: 300 }
+    bulkhead_max_concurrent: 25
+
+  - from: "switch-orchestrator"
+    to: "clearing-network"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 1500
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 100, max_delay_ms: 800 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.30, min_calls: 5, open_duration_s: 20, probe_fraction: 0.1 }
+
+seed: 42
+`,
+    []
+  );
+
+  const sampleDockerComposeBasic = useMemo(
     () => `version: '3.8'
+
 services:
   web:
     image: nginx:alpine
@@ -583,12 +798,81 @@ services:
     []
   );
 
+  const sampleDockerComposeFleet = useMemo(
+    () => `version: '3.8'
+
+services:
+  gateway:
+    image: traefik:v2.10
+    ports:
+      - "80:80"
+      - "443:443"
+    deploy:
+      replicas: 4
+    depends_on:
+      - auth-service
+      - catalog-service
+      - checkout-service
+
+  auth-service:
+    image: node:18-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - redis-cache
+
+  catalog-service:
+    image: python:3.11-slim
+    deploy:
+      replicas: 4
+    depends_on:
+      - redis-cache
+      - products-db
+
+  checkout-service:
+    image: golang:1.22-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - payments-service
+      - orders-db
+
+  payments-service:
+    image: node:18-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - payment-gw
+
+  redis-cache:
+    image: redis:7-alpine
+    deploy:
+      replicas: 2
+
+  products-db:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 2
+
+  orders-db:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 2
+
+  payment-gw:
+    image: nginx:alpine
+    deploy:
+      replicas: 2`,
+    []
+  );
+
   return (
     <div className="w-full h-full relative">
       <ReactFlowProvider>
         <GraphCanvasInner
           {...props}
           onOpenImport={() => {
+            setActiveSampleId('yaml_boilerplate');
             setInputText(sampleArchitectureYaml);
             setImportError(null);
             setModalMode('import');
@@ -638,25 +922,92 @@ services:
                 </div>
               ) : (
                 <div className="h-full flex flex-col">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 text-[11px] text-text-muted">
-                    <span>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2 text-[11px] text-text-muted">
+                    <span className="font-medium text-text-primary">
                       {modalMode === 'import'
                         ? 'Paste CascadeLab Architecture YAML/JSON or docker-compose.yml:'
                         : 'Current Architecture Specification YAML:'}
                     </span>
                     {modalMode === 'import' && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {/* Type 1: CascadeLab Architecture YAML Examples */}
+                        <div className="flex items-center bg-surface border border-border rounded p-0.5 gap-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-text-dim px-1.5">YAML:</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSampleId('yaml_boilerplate');
+                              setInputText(sampleArchitectureYaml);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] transition-all ${
+                              activeSampleId === 'yaml_boilerplate'
+                                ? 'bg-accent text-background font-bold shadow-sm'
+                                : 'text-text-muted hover:text-text-primary hover:bg-surface-raised'
+                            }`}
+                          >
+                            Full Boilerplate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSampleId('yaml_paynex');
+                              setInputText(samplePayNexYaml);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] transition-all ${
+                              activeSampleId === 'yaml_paynex'
+                                ? 'bg-accent text-background font-bold shadow-sm'
+                                : 'text-text-muted hover:text-text-primary hover:bg-surface-raised'
+                            }`}
+                          >
+                            PayNex Fintech Example
+                          </button>
+                        </div>
+
+                        {/* Type 2: Docker Compose Examples */}
+                        <div className="flex items-center bg-surface border border-border rounded p-0.5 gap-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-text-dim px-1.5">Docker:</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSampleId('compose_basic');
+                              setInputText(sampleDockerComposeBasic);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] transition-all ${
+                              activeSampleId === 'compose_basic'
+                                ? 'bg-accent text-background font-bold shadow-sm'
+                                : 'text-text-muted hover:text-text-primary hover:bg-surface-raised'
+                            }`}
+                          >
+                            Basic Stack
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSampleId('compose_fleet');
+                              setInputText(sampleDockerComposeFleet);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] transition-all ${
+                              activeSampleId === 'compose_fleet'
+                                ? 'bg-accent text-background font-bold shadow-sm'
+                                : 'text-text-muted hover:text-text-primary hover:bg-surface-raised'
+                            }`}
+                          >
+                            Fleet Example
+                          </button>
+                        </div>
+
+                        {/* Clear / Delete Content Action */}
                         <button
-                          onClick={() => setInputText(sampleArchitectureYaml)}
-                          className="px-2 py-0.5 rounded bg-accent/15 text-accent hover:bg-accent/25 border border-accent/30 text-[10px] font-semibold transition-colors"
+                          type="button"
+                          onClick={() => {
+                            setActiveSampleId('custom');
+                            setInputText('');
+                          }}
+                          className="px-2 py-0.5 rounded bg-surface border border-border text-[10px] text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 hover:border-rose-500/30 flex items-center gap-1 transition-all"
+                          title="Clear all text in editor"
                         >
-                          Load Full Boilerplate (YAML)
-                        </button>
-                        <button
-                          onClick={() => setInputText(sampleDockerCompose)}
-                          className="px-2 py-0.5 rounded bg-surface hover:bg-surface-raised border border-border text-[10px] text-text-muted hover:text-text-primary transition-colors"
-                        >
-                          Load Docker-Compose Sample
+                          <Trash2 className="w-3 h-3" />
+                          <span>Clear</span>
                         </button>
                       </div>
                     )}
@@ -665,7 +1016,11 @@ services:
                     rows={18}
                     value={inputText}
                     readOnly={modalMode === 'export'}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onChange={(e) => {
+                      setInputText(e.target.value);
+                      setActiveSampleId('custom');
+                    }}
+                    placeholder="Paste your CascadeLab architecture YAML / JSON or docker-compose.yml here..."
                     className="w-full bg-background border border-border rounded p-3 text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
                   />
                   {importError && (

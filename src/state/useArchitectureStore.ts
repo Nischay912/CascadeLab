@@ -24,7 +24,9 @@ interface ArchitectureState {
   importYamlOrJson: (text: string) => void;
   selectElement: (type: 'service' | 'edge' | null, id: string | null) => void;
   updateService: (serviceId: string, updates: Partial<ServiceSpec>) => void;
+  removeService: (serviceId: string) => void;
   updateEdge: (edgeId: string, updates: Partial<EdgeSpec>) => void;
+  removeEdge: (edgeId: string) => void;
   addFault: (fault: FaultSpec) => void;
   removeFault: (faultId: string) => void;
   setWorkloadPattern: (pattern: any) => void;
@@ -118,6 +120,35 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     set({ currentSpec: updatedSpec, layout });
   },
 
+  removeService: (serviceId) => {
+    const { currentSpec } = get();
+    if (currentSpec.services.length <= 1) return; // Prevent deleting the only remaining service
+    const updatedServices = currentSpec.services.filter((svc) => svc.id !== serviceId);
+    const updatedEdges = currentSpec.edges.filter(
+      (edge) => edge.from !== serviceId && edge.to !== serviceId
+    );
+    const updatedFaults = currentSpec.faults.filter((fault) => fault.target !== serviceId);
+    const updatedWorkload = { ...currentSpec.workload };
+    if (updatedWorkload.entry === serviceId && updatedServices.length > 0) {
+      updatedWorkload.entry = updatedServices[0].id;
+    }
+    const updatedSpec: ArchitectureSpec = {
+      ...currentSpec,
+      services: updatedServices,
+      edges: updatedEdges,
+      faults: updatedFaults,
+      workload: updatedWorkload,
+    };
+    const layout = computeGraphLayout(updatedSpec);
+    syncHashToUrl(updatedSpec);
+    set({
+      currentSpec: updatedSpec,
+      layout,
+      selectedElementId: null,
+      selectedElementType: null,
+    });
+  },
+
   updateEdge: (edgeId, updates) => {
     const { currentSpec } = get();
     const updatedEdges = currentSpec.edges.map((edge) =>
@@ -132,6 +163,25 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     const layout = computeGraphLayout(updatedSpec);
     syncHashToUrl(updatedSpec);
     set({ currentSpec: updatedSpec, layout });
+  },
+
+  removeEdge: (edgeId) => {
+    const { currentSpec } = get();
+    const updatedEdges = currentSpec.edges.filter(
+      (edge) => edge.id !== edgeId && `${edge.from}->${edge.to}` !== edgeId
+    );
+    const updatedSpec: ArchitectureSpec = {
+      ...currentSpec,
+      edges: updatedEdges,
+    };
+    const layout = computeGraphLayout(updatedSpec);
+    syncHashToUrl(updatedSpec);
+    set({
+      currentSpec: updatedSpec,
+      layout,
+      selectedElementId: null,
+      selectedElementType: null,
+    });
   },
 
   addFault: (fault) => {
