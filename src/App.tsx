@@ -26,13 +26,16 @@ import {
 } from './demo';
 import { shopFastNaiveTemplate } from './schema/templates';
 import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
+import { DeleteArchitectureModal } from './ui/DeleteArchitectureModal';
 import { ShieldAlert } from 'lucide-react';
 
 export const App: React.FC = () => {
   const {
     currentSpec,
     activeTemplateKey,
+    customArchitectures,
     loadTemplate,
+    deleteCustomArchitecture,
     setSpec,
     selectElement,
     addFault,
@@ -63,6 +66,7 @@ export const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isBreakItOpen, setIsBreakItOpen] = useState(false);
   const [isDefendItOpen, setIsDefendItOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDirectorOpen, setIsDirectorOpen] = useState(false);
   const [isPostmortemOpen, setIsPostmortemOpen] = useState(false);
   const [postmortemData, setPostmortemData] = useState<PostmortemData | null>(null);
@@ -362,15 +366,9 @@ export const App: React.FC = () => {
         speed={speed}
         onChangeSpeed={setSpeed}
         selectedTemplate={activeTemplateKey}
+        customArchitectures={customArchitectures}
         onSelectTemplate={(tpl) => loadTemplate(tpl)}
-        onDeleteCustomArchitecture={() => {
-          loadTemplate('shopfast');
-          setScenario('baseline', shopFastNaiveTemplate);
-          initializeSimulation(shopFastNaiveTemplate, 42);
-          resetSimulation();
-          setSpeed(1);
-          window.history.replaceState(null, '', window.location.pathname);
-        }}
+        onDeleteCustomArchitecture={() => setIsDeleteModalOpen(true)}
         selectedScenario={selectedScenario}
         onSelectScenario={handleScenarioChange}
         resilienceScore={chaosResilienceScore}
@@ -614,6 +612,22 @@ export const App: React.FC = () => {
           onClose={() => setIsPostmortemOpen(false)}
         />
       )}
+
+      {/* Delete Architecture Confirmation Modal */}
+      <DeleteArchitectureModal
+        isOpen={isDeleteModalOpen}
+        architectureName={currentSpec.name || 'Custom Architecture'}
+        servicesCount={currentSpec.services.length}
+        onCancel={() => setIsDeleteModalOpen(false)}
+        onConfirm={() => {
+          deleteCustomArchitecture(activeTemplateKey);
+          setScenario('baseline', shopFastNaiveTemplate);
+          initializeSimulation(shopFastNaiveTemplate, 42);
+          resetSimulation();
+          setSpeed(1);
+          setIsDeleteModalOpen(false);
+        }}
+      />
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ResilienceRing } from './ResilienceRing';
+import { CustomArchitectureEntry } from '../state/useArchitectureStore';
 
 interface TopNavProps {
   isRunning: boolean;
@@ -25,6 +26,7 @@ interface TopNavProps {
   onChangeSpeed: (speed: number) => void;
   selectedTemplate: string;
   onSelectTemplate: (templateKey: string) => void;
+  customArchitectures?: CustomArchitectureEntry[];
   onDeleteCustomArchitecture?: () => void;
   selectedScenario: string;
   onSelectScenario: (scenarioKey: string) => void;
@@ -53,6 +55,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onChangeSpeed,
   selectedTemplate,
   onSelectTemplate,
+  customArchitectures,
   onDeleteCustomArchitecture,
   selectedScenario,
   onSelectScenario,
@@ -100,32 +103,51 @@ export const TopNav: React.FC<TopNavProps> = ({
           <select
             value={selectedTemplate}
             onChange={(e) => onSelectTemplate(e.target.value)}
-            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[135px] sm:max-w-[160px] truncate"
+            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[140px] sm:max-w-[175px] truncate"
+            title="Switch microservices architecture"
           >
-            <option value="shopfast">ShopFast (Naive - 13 Services)</option>
-            <option value="shopfast_hardened">ShopFast (Hardened Reference)</option>
-            <option value="ridehailing">Ride-Hailing Fleet</option>
-            <option value="streaming">Video Streaming Edge</option>
-            <option value="payments">UPI / Payments Switch</option>
-            <option value="quickcommerce">Quick-Commerce Delivery</option>
-            {['imported', 'custom', 'docker-compose'].includes(selectedTemplate) && (
-              <option value={selectedTemplate}>Custom Architecture (Imported)</option>
+            <optgroup label="Default Benchmark Architectures">
+              <option value="shopfast">ShopFast (Naive - 13 Services)</option>
+              <option value="shopfast_hardened">ShopFast (Hardened Reference)</option>
+              <option value="ridehailing">Ride-Hailing Fleet (6 Services)</option>
+              <option value="streaming">Video Streaming Edge (7 Services)</option>
+              <option value="payments">UPI / Payments Switch (8 Services)</option>
+              <option value="quickcommerce">Quick-Commerce Delivery (6 Services)</option>
+            </optgroup>
+            {customArchitectures && customArchitectures.length > 0 && (
+              <optgroup label="Custom / Imported Architectures">
+                {customArchitectures.map((arch) => (
+                  <option key={arch.id} value={arch.id}>
+                    {arch.name} ({arch.spec.services.length} services)
+                  </option>
+                ))}
+              </optgroup>
             )}
+            {/* Fallback for legacy state keys if not found in customArchitectures list */}
+            {['imported', 'custom', 'docker-compose'].includes(selectedTemplate) &&
+              (!customArchitectures || !customArchitectures.some((c) => c.id === selectedTemplate)) && (
+                <optgroup label="Imported Architecture">
+                  <option value={selectedTemplate}>Custom Architecture (Imported)</option>
+                </optgroup>
+              )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         {/* Delete / Unload Custom Architecture Action */}
-        {['imported', 'custom', 'docker-compose'].includes(selectedTemplate) && onDeleteCustomArchitecture && (
-          <button
-            onClick={onDeleteCustomArchitecture}
-            className="px-2 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold hover:shadow-noc"
-            title="Delete / Unload custom imported architecture and revert to default template"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Delete Arch</span>
-          </button>
-        )}
+        {(selectedTemplate.startsWith('custom_') ||
+          ['imported', 'custom', 'docker-compose'].includes(selectedTemplate) ||
+          Boolean(customArchitectures && customArchitectures.some((c) => c.id === selectedTemplate))) &&
+          onDeleteCustomArchitecture && (
+            <button
+              onClick={onDeleteCustomArchitecture}
+              className="px-2 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold hover:shadow-noc active:scale-95"
+              title="Delete current custom architecture"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Delete Arch</span>
+            </button>
+          )}
 
         {/* Scenario Selector */}
         <div className="relative group hidden sm:block">
