@@ -156,7 +156,7 @@ export function evaluateIncidentCommander(
           return cloned;
         },
       };
-    } else if (culpritService && culpritService.instances) {
+    } else if (culpritService && culpritService.instances && culpritService.instances.initial <= (culpritService.instances.min || 2) + 4) {
       // Mitigation 3: Rapid Horizontal Pod Burst Autoscale
       const currentInitial = culpritService.instances.initial;
       prescribedMitigation = {
@@ -181,39 +181,43 @@ export function evaluateIncidentCommander(
     } else {
       // Mitigation 4: Global Adaptive Load Shedding on Entry
       const entrySvc = spec.services.find((s) => s.entry) || spec.services[0];
-      prescribedMitigation = {
-        id: `mitigate_loadshed_${entrySvc.id}`,
-        title: `Activate Adaptive Load Shedding on Entry [${entrySvc.name}]`,
-        description: `Drop bottom 15% non-critical requests at edge to protect core checkout transaction processing.`,
-        targetType: 'service',
-        targetId: entrySvc.id,
-        mechanism: 'load_shedding',
-        estimatedRecoveryPct: 25,
-        explanation: `Ingress offered load exceeds aggregate fleet processing capacity. Shedding low-priority requests preserves SLA for paying transactions and prevents cascading cluster brownout.`,
-        apply: (architecture: ArchitectureSpec) => {
-          const cloned: ArchitectureSpec = JSON.parse(JSON.stringify(architecture));
-          const svc = cloned.services.find((s) => s.id === entrySvc.id);
-          if (svc) {
-            svc.load_shedding = {
-              enabled: true,
-              threshold: 0.85,
-            };
-          }
-          return cloned;
-        },
-      };
+      if (entrySvc && !entrySvc.load_shedding?.enabled) {
+        prescribedMitigation = {
+          id: `mitigate_loadshed_${entrySvc.id}`,
+          title: `Activate Adaptive Load Shedding on Entry [${entrySvc.name}]`,
+          description: `Drop bottom 15% non-critical requests at edge to protect core checkout transaction processing.`,
+          targetType: 'service',
+          targetId: entrySvc.id,
+          mechanism: 'load_shedding',
+          estimatedRecoveryPct: 25,
+          explanation: `Ingress offered load exceeds aggregate fleet processing capacity. Shedding low-priority requests preserves SLA for paying transactions and prevents cascading cluster brownout.`,
+          apply: (architecture: ArchitectureSpec) => {
+            const cloned: ArchitectureSpec = JSON.parse(JSON.stringify(architecture));
+            const svc = cloned.services.find((s) => s.id === entrySvc.id);
+            if (svc) {
+              svc.load_shedding = {
+                enabled: true,
+                threshold: 0.85,
+              };
+            }
+            return cloned;
+          },
+        };
+      }
     }
 
-    // Generate Tactical Log
-    newLogs.push({
-      id: `log_${currentTime}_${Math.random().toString(36).substring(2, 6)}`,
-      time: currentTime,
-      timestamp,
-      level: threatLevel === 'DEFCON_1' ? 'critical' : 'warning',
-      title: threatTitle,
-      message: `${threatDescription} Culprit node: '${culpritService?.name || culpritId}'. Prescribed tactical countermeasure: ${prescribedMitigation.title}.`,
-      serviceId: culpritId,
-    });
+    // Generate Tactical Log if countermeasure is formulated
+    if (prescribedMitigation) {
+      newLogs.push({
+        id: `log_${currentTime}_${Math.random().toString(36).substring(2, 6)}`,
+        time: currentTime,
+        timestamp,
+        level: threatLevel === 'DEFCON_1' ? 'critical' : 'warning',
+        title: threatTitle,
+        message: `${threatDescription} Culprit node: '${culpritService?.name || culpritId}'. Prescribed tactical countermeasure: ${prescribedMitigation.title}.`,
+        serviceId: culpritId,
+      });
+    }
   }
 
   return {

@@ -62,6 +62,7 @@ export const App: React.FC = () => {
     setSpeed,
     setScenario,
     toggleRunning,
+    pauseSimulation,
     stepForward,
     resetSimulation,
   } = useSimulationStore();
@@ -100,6 +101,7 @@ export const App: React.FC = () => {
   } = useCommanderStore();
 
   const lastAutonomousExecutionRef = useRef<number>(-1);
+  const skipReinitRef = useRef<boolean>(false);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -120,9 +122,13 @@ export const App: React.FC = () => {
     setFindings(lintReport.findings);
   }, [lintReport]);
 
-  // Initialize simulation batch when spec or seed changes (skip if battle is active)
+  // Initialize simulation batch when spec or seed changes (skip if battle is active or in-flight update)
   useEffect(() => {
     if (liveBattle) return;
+    if (skipReinitRef.current) {
+      skipReinitRef.current = false;
+      return;
+    }
     initializeSimulation(currentSpec, seed);
   }, [currentSpec, seed, liveBattle, initializeSimulation]);
 
@@ -146,6 +152,7 @@ export const App: React.FC = () => {
         toggleRunning();
       } else if (e.key === 'r' || e.key === 'R') {
         resetSimulation();
+        lastAutonomousExecutionRef.current = -1;
       } else if (e.key === '1') {
         setSpeed(1);
       } else if (e.key === '2') {
@@ -160,6 +167,7 @@ export const App: React.FC = () => {
         // Panic Reset: clears all active faults and returns to clean shopfast state
         loadTemplate('shopfast');
         resetSimulation();
+        lastAutonomousExecutionRef.current = -1;
         setIsBreakItOpen(false);
         setIsDefendItOpen(false);
         setIsDirectorOpen(false);
@@ -206,17 +214,24 @@ export const App: React.FC = () => {
       addLogs(evaluation.newLogs);
     }
 
+    // Reset autonomous execution timestamp when simulation rewinds to 0
+    if (currentTime === 0) {
+      lastAutonomousExecutionRef.current = -1;
+    }
+
     // Auto-Pilot Autonomous Self-Healing Directive
     if (
       commanderMode === 'autonomous' &&
       evaluation.threatLevel !== 'DEFCON_5' &&
       evaluation.threatLevel !== 'DEFCON_4' &&
       evaluation.prescribedMitigation &&
-      lastAutonomousExecutionRef.current !== currentTime
+      (lastAutonomousExecutionRef.current === -1 || currentTime - lastAutonomousExecutionRef.current >= 3)
     ) {
       lastAutonomousExecutionRef.current = currentTime;
+      skipReinitRef.current = true;
       const updated = evaluation.prescribedMitigation.apply(currentSpec);
       setSpec(updated);
+      runSimulationBatch(updated, 180, seed);
       recordMitigationApplied();
       addLogs([
         {
@@ -225,7 +240,7 @@ export const App: React.FC = () => {
           timestamp: formatMissionTime(currentTime),
           level: 'action',
           title: 'Autonomous Self-Healing Action Executed',
-          message: `AI Commander autonomously executed '${evaluation.prescribedMitigation.title}'. Mitigated bottleneck and restored system SLO.`,
+          message: `AI Commander autonomously executed '${evaluation.prescribedMitigation.title}'. Mitigated bottleneck in-flight and restored system SLO.`,
         },
       ]);
     }
@@ -235,30 +250,35 @@ export const App: React.FC = () => {
     currentTime,
     rootCause,
     commanderMode,
+    seed,
     setThreatLevel,
     setActiveMitigation,
     addLogs,
     recordMitigationApplied,
     setSpec,
+    runSimulationBatch,
   ]);
 
   const handleApplyCommanderMitigation = useCallback(
     (mitigation: CommanderMitigation) => {
+      pauseSimulation();
       const updated = mitigation.apply(currentSpec);
+      // skipReinitRef is false, so initializeSimulation runs:
+      // resets to 00:00, isRunning = false (paused), metrics = history[0] (all green)
       setSpec(updated);
       recordMitigationApplied();
       addLogs([
         {
           id: `auth_${Date.now()}`,
-          time: currentTime,
-          timestamp: formatMissionTime(currentTime),
+          time: 0,
+          timestamp: formatMissionTime(0),
           level: 'action',
           title: 'Mitigation Authorized & Deployed',
-          message: `Human SRE authorized '${mitigation.title}'. Resilience policy applied to Digital Twin.`,
+          message: `Human SRE authorized '${mitigation.title}'. Digital Twin stabilized at baseline 00:00 (All green, paused).`,
         },
       ]);
     },
-    [currentSpec, currentTime, setSpec, recordMitigationApplied, addLogs]
+    [currentSpec, setSpec, recordMitigationApplied, addLogs, pauseSimulation]
   );
 
   const handleRunLinter = () => {
@@ -272,6 +292,7 @@ export const App: React.FC = () => {
 
   const handleApplyFix = (findingId: string) => {
     const updatedSpec = applyLintFix(currentSpec, findingId);
+    skipReinitRef.current = true;
     setSpec(updatedSpec);
     runSimulationBatch(updatedSpec, 180, seed);
   };

@@ -139,7 +139,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   effectsEnabled: true,
 
   initializeSimulation: (spec: ArchitectureSpec, seed = 42) => {
-    const { selectedScenario, isRunning } = get();
+    const { selectedScenario } = get();
     const effectiveSpec = applyScenarioToSpec(spec, selectedScenario);
     const engine = new SimulationEngine(effectiveSpec, seed);
     const history = engine.runBatch(180);
@@ -154,7 +154,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       currentMetrics: initialMetrics,
       currentTime: 0,
       maxTime: 180,
-      isRunning,
+      isRunning: false,
       seed,
       originNodeId,
     });

@@ -160,4 +160,73 @@ describe('AI Autonomous Incident Commander Engine', () => {
       expect(catalogSvc.instances.initial).toBeGreaterThan(4);
     }
   });
+
+  it('progresses to entry load shedding when pod burst capacity is reached', () => {
+    const spec = JSON.parse(JSON.stringify(shopFastNaiveTemplate));
+    // Simulate edges already hardened
+    spec.edges.forEach((e: any) => {
+      e.circuit_breaker = { enabled: true, failure_rate_threshold: 0.35 };
+      e.backoff = { mode: 'exponential', jitter: true };
+    });
+    // Set catalog initial replicas to max burst threshold
+    const catalog = spec.services.find((s: any) => s.id === 'catalog');
+    if (catalog) {
+      catalog.instances.initial = 12;
+    }
+
+    const mockTick: SimulationTickMetrics = {
+      t: 60,
+      userSuccessRate: 60.0,
+      userP95Ms: 900,
+      cumulativeMoneyLostInr: 8000,
+      activeInstancesTotal: 40,
+      crashedInstancesTotal: 0,
+      amplification: 1.8,
+      activeFaults: [],
+      services: {
+        catalog: {
+          rps: 900,
+          p95Ms: 900,
+          utilization: 0.98,
+          instancesReady: 12,
+          instancesCrashed: 0,
+          queue: 200,
+        },
+      },
+      edges: {},
+    };
+
+    const mockRootCause = {
+      origin: 'catalog',
+      originTime: 50,
+      pattern: 'queue_buildup' as const,
+      confidence: 0.9,
+      isMetastable: false,
+      blastRadiusPct: 35,
+      evidence: ['Catalog queue overflow'],
+      patterns: [],
+      blastRadius: {
+        totalServices: 13,
+        degradedServices: ['catalog'],
+        degradedPercentage: 35,
+        peakAmplification: 1.8,
+        totalMoneyLostInr: 8000,
+        timeToDetectS: 52,
+        timeToRecoverS: null,
+        isMetastable: false,
+      },
+      chronology: [],
+    };
+
+    const result = evaluateIncidentCommander(spec, mockTick, 60, mockRootCause);
+
+    expect(result.prescribedMitigation).not.toBeNull();
+    expect(result.prescribedMitigation?.mechanism).toBe('load_shedding');
+
+    if (result.prescribedMitigation) {
+      const hardened = result.prescribedMitigation.apply(spec);
+      const entry = hardened.services.find((s: any) => s.entry);
+      expect(entry?.load_shedding?.enabled).toBe(true);
+    }
+  });
 });
