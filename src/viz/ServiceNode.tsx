@@ -214,38 +214,38 @@ export const ServiceNode: React.FC<NodeProps> = ({ data, selected }) => {
             </div>
 
             {/* Service Name + Badges + Util */}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <h4
-                  data-testid="service-name"
-                  className="text-[14px] font-bold text-text-primary leading-tight font-sans tracking-tight whitespace-nowrap"
-                  title={label}
-                >
-                  {label}
-                </h4>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <h4
+                data-testid="service-name"
+                className="text-[13px] font-bold text-text-primary leading-snug font-sans tracking-tight truncate block"
+                title={label}
+              >
+                {label}
+              </h4>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[11px] font-mono text-text-dim leading-none flex-shrink-0">
+                  {util}% util
+                </span>
                 {service?.entry && (
-                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-accent/20 text-accent font-bold leading-none flex-shrink-0">
+                  <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-accent/20 text-accent font-bold border border-accent/30 leading-none flex-shrink-0">
                     ENTRY
                   </span>
                 )}
                 {isSPOF && !label.includes('SPOF') && (
-                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30 leading-none flex-shrink-0">
+                  <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30 leading-none flex-shrink-0">
                     SPOF
                   </span>
                 )}
               </div>
-              <span className="text-[11px] font-mono text-text-dim block leading-tight mt-0.5">
-                {util}% util
-              </span>
             </div>
           </div>
 
           {/* Status Badge */}
           <div
-            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold tracking-wide border flex-shrink-0 ${statusConfig.bg} ${statusConfig.border}`}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-wide border flex-shrink-0 ml-1.5 ${statusConfig.bg} ${statusConfig.border}`}
             style={{ color: statusConfig.color }}
           >
-            <StatusIcon className="w-3 h-3" />
+            <StatusIcon className="w-2.5 h-2.5 flex-shrink-0" />
             <span>{statusConfig.text}</span>
           </div>
         </div>
