@@ -1,0 +1,161 @@
+# =========================================================================
+# MedPulse: Critical Healthcare Telehealth & EHR Platform
+# =========================================================================
+# HIPAA-compliant medical microservices topology with zero-downtime
+# electronic health records and real-time video consultation signaling.
+# =========================================================================
+
+name: "MedPulse Telehealth & EHR"
+description: "Mission-critical patient medical records, appointment scheduling, and prescription platform."
+
+slo:
+  success_pct: 99.95
+  p95_ms: 350
+
+value_per_request_inr: 250
+
+workload:
+  entry: "health-ingress"
+  pattern: "constant"
+  base_rps: 450
+  multiplier: 1.0
+  duration_s: 180
+  ramp_time_s: 25
+
+services:
+  - id: "health-ingress"
+    name: "FHIR / HL7 Ingress"
+    role: "HIPAA Compliant API Gateway"
+    entry: true
+    position: { x: 80, y: 190 }
+    instances: { initial: 4, min: 2, max: 10 }
+    concurrency: 50
+    service_time_ms: 8
+    queue_limit: 250
+    load_shedding: { enabled: true, threshold: 0.90 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 3500
+    zone_spread: ["a", "b"]
+
+  - id: "patient-identity"
+    name: "Patient Auth Vault"
+    role: "Biometric & 2FA Identity Provider"
+    position: { x: 380, y: 80 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 40
+    service_time_ms: 12
+    queue_limit: 180
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 2800
+    zone_spread: ["a", "b"]
+
+  - id: "appointment-router"
+    name: "Doctor Scheduler"
+    role: "Telehealth Room & Slot Booking"
+    position: { x: 380, y: 300 }
+    instances: { initial: 4, min: 2, max: 8 }
+    concurrency: 35
+    service_time_ms: 15
+    queue_limit: 200
+    load_shedding: { enabled: true, threshold: 0.80 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 3200
+    zone_spread: ["a", "b"]
+
+  - id: "ehr-clinical-db"
+    name: "Clinical Records DB"
+    role: "Encrypted Patient History Store"
+    position: { x: 680, y: 60 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 45
+    service_time_ms: 20
+    queue_limit: 200
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 30, cooldown_s: 120 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 7500
+    zone_spread: ["a", "b"]
+
+  - id: "rx-prescription-svc"
+    name: "Prescription Engine"
+    role: "Drug Interaction & Digital Rx"
+    position: { x: 680, y: 220 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 35
+    service_time_ms: 16
+    queue_limit: 150
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 4200
+    zone_spread: ["a", "b"]
+
+  - id: "insurance-clearing"
+    name: "Claims Gateway"
+    role: "Third-Party Insurance Pre-Auth"
+    position: { x: 980, y: 190 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 25
+    service_time_ms: 70
+    queue_limit: 120
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: false, target_util: 0.6, eval_period_s: 15, startup_delay_s: 45, cooldown_s: 120 }
+    crash: { enabled: false, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 0
+    zone_spread: ["a"]
+
+edges:
+  - from: "health-ingress"
+    to: "patient-identity"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 400
+    retries: 2
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 30, max_delay_ms: 250 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "health-ingress"
+    to: "appointment-router"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 500
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 40, max_delay_ms: 300 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.40, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "appointment-router"
+    to: "ehr-clinical-db"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 600
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 30, max_delay_ms: 200 }
+    bulkhead_max_concurrent: 30
+
+  - from: "appointment-router"
+    to: "rx-prescription-svc"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: false
+    timeout_ms: 400
+    retries: 1
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 5, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "rx-prescription-svc"
+    to: "insurance-clearing"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 1200
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 80, max_delay_ms: 600 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.30, min_calls: 5, open_duration_s: 20, probe_fraction: 0.1 }
+
+seed: 42

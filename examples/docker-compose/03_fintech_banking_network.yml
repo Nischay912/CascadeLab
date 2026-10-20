@@ -1,0 +1,56 @@
+version: '3.8'
+
+# =========================================================================
+# Demo Example 3: Core Banking UPI / Payment Network Stack
+# =========================================================================
+# High-reliability financial transaction processing network with token
+# verification, fraud ML scoring, double-entry ledger, and HSM vault.
+# =========================================================================
+
+services:
+  pay-gateway:
+    image: envoyproxy/envoy:v1.28
+    ports:
+      - "443:443"
+    deploy:
+      replicas: 5
+    depends_on:
+      - auth-token-svc
+      - switch-orchestrator
+
+  auth-token-svc:
+    image: ghcr.io/fintech/auth-vault:v2.0
+    deploy:
+      replicas: 3
+    depends_on:
+      - idempotency-redis
+
+  switch-orchestrator:
+    image: ghcr.io/fintech/switch-core:v3.2
+    deploy:
+      replicas: 6
+    depends_on:
+      - fraud-engine
+      - idempotency-redis
+      - account-ledger
+      - hsm-vault
+
+  fraud-engine:
+    image: ghcr.io/fintech/fraud-scorer:v1.1
+    deploy:
+      replicas: 4
+
+  idempotency-redis:
+    image: redis:7.2-alpine
+    deploy:
+      replicas: 3
+
+  account-ledger:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 3
+
+  hsm-vault:
+    image: ghcr.io/fintech/crypto-enclave:v1.0
+    deploy:
+      replicas: 3

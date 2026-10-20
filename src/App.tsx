@@ -363,6 +363,14 @@ export const App: React.FC = () => {
         onChangeSpeed={setSpeed}
         selectedTemplate={activeTemplateKey}
         onSelectTemplate={(tpl) => loadTemplate(tpl)}
+        onDeleteCustomArchitecture={() => {
+          loadTemplate('shopfast');
+          setScenario('baseline', shopFastNaiveTemplate);
+          initializeSimulation(shopFastNaiveTemplate, 42);
+          resetSimulation();
+          setSpeed(1);
+          window.history.replaceState(null, '', window.location.pathname);
+        }}
         selectedScenario={selectedScenario}
         onSelectScenario={handleScenarioChange}
         resilienceScore={chaosResilienceScore}

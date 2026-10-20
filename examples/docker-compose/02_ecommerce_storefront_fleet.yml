@@ -1,0 +1,71 @@
+version: '3.8'
+
+# =========================================================================
+# Demo Example 2: Enterprise E-Commerce Microservices Fleet
+# =========================================================================
+# High-traffic retail storefront topology with separate catalog,
+# shopping cart, checkout, payments, and distributed caches.
+# =========================================================================
+
+services:
+  gateway:
+    image: traefik:v2.10
+    ports:
+      - "80:80"
+      - "443:443"
+    deploy:
+      replicas: 4
+    depends_on:
+      - auth-service
+      - catalog-service
+      - checkout-service
+
+  auth-service:
+    image: node:18-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - redis-cache
+
+  catalog-service:
+    image: python:3.11-slim
+    deploy:
+      replicas: 4
+    depends_on:
+      - redis-cache
+      - products-db
+
+  checkout-service:
+    image: golang:1.22-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - payments-service
+      - orders-db
+
+  payments-service:
+    image: node:18-alpine
+    deploy:
+      replicas: 3
+    depends_on:
+      - payment-gw
+
+  redis-cache:
+    image: redis:7-alpine
+    deploy:
+      replicas: 2
+
+  products-db:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 2
+
+  orders-db:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 2
+
+  payment-gw:
+    image: nginx:alpine
+    deploy:
+      replicas: 2

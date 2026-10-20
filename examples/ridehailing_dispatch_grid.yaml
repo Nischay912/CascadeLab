@@ -1,0 +1,160 @@
+# =========================================================================
+# UrbanRide: Real-Time Ride Hailing & Fleet Dispatch Grid
+# =========================================================================
+# High-frequency geospatial matching, surge pricing calculator,
+# driver location telemetry, and passenger billing.
+# =========================================================================
+
+name: "UrbanRide Dispatch Grid"
+description: "Ultra-low latency driver-rider matching engine with dynamic surge pricing."
+
+slo:
+  success_pct: 99.8
+  p95_ms: 250
+
+value_per_request_inr: 65
+
+workload:
+  entry: "rider-gw"
+  pattern: "constant"
+  base_rps: 800
+  multiplier: 1.0
+  duration_s: 180
+  ramp_time_s: 20
+
+services:
+  - id: "rider-gw"
+    name: "Rider API Gateway"
+    role: "Mobile App Edge Entrypoint"
+    entry: true
+    position: { x: 80, y: 190 }
+    instances: { initial: 5, min: 3, max: 15 }
+    concurrency: 60
+    service_time_ms: 6
+    queue_limit: 300
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 3000
+    zone_spread: ["a", "b"]
+
+  - id: "geo-h3-index"
+    name: "H3 Geospatial Index"
+    role: "Hexagonal Spatial Coordinate Store"
+    position: { x: 380, y: 80 }
+    instances: { initial: 4, min: 2, max: 8 }
+    concurrency: 70
+    service_time_ms: 4
+    queue_limit: 400
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 3800
+    zone_spread: ["a", "b"]
+
+  - id: "ride-matchmaker"
+    name: "Matching Engine"
+    role: "Driver-Rider Bipartite Graph Matcher"
+    position: { x: 380, y: 300 }
+    instances: { initial: 5, min: 3, max: 12 }
+    concurrency: 40
+    service_time_ms: 18
+    queue_limit: 250
+    load_shedding: { enabled: true, threshold: 0.80 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 10, startup_delay_s: 15, cooldown_s: 60 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 5200
+    zone_spread: ["a", "b"]
+
+  - id: "surge-calculator"
+    name: "Surge Pricing ML"
+    role: "Supply-Demand Equilibrium Multiplier"
+    position: { x: 680, y: 60 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 50
+    service_time_ms: 10
+    queue_limit: 200
+    load_shedding: { enabled: true, threshold: 0.85 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 4000
+    zone_spread: ["a", "b"]
+
+  - id: "trip-state-db"
+    name: "Trip State Store"
+    role: "Active Rides & ETA Database"
+    position: { x: 680, y: 240 }
+    instances: { initial: 4, min: 2, max: 8 }
+    concurrency: 45
+    service_time_ms: 12
+    queue_limit: 250
+    load_shedding: { enabled: false, threshold: 0.8 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 30, cooldown_s: 120 }
+    crash: { enabled: true, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 6500
+    zone_spread: ["a", "b"]
+
+  - id: "driver-billing"
+    name: "Payment & Wallet"
+    role: "Fares Settlement & Stripe Ingress"
+    position: { x: 980, y: 190 }
+    instances: { initial: 3, min: 2, max: 6 }
+    concurrency: 30
+    service_time_ms: 45
+    queue_limit: 150
+    load_shedding: { enabled: true, threshold: 0.80 }
+    autoscale: { enabled: true, target_util: 0.65, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    crash: { enabled: false, after_overload_s: 20, restart_delay_s: 30 }
+    cost_inr_per_instance_month: 4200
+    zone_spread: ["a"]
+
+edges:
+  - from: "rider-gw"
+    to: "geo-h3-index"
+    calls_per_request: 2.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 150
+    retries: 2
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 15, max_delay_ms: 100 }
+
+  - from: "rider-gw"
+    to: "ride-matchmaker"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 400
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 30, max_delay_ms: 200 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.40, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "ride-matchmaker"
+    to: "surge-calculator"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: false
+    timeout_ms: 200
+    retries: 1
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.35, min_calls: 10, open_duration_s: 15, probe_fraction: 0.1 }
+
+  - from: "ride-matchmaker"
+    to: "trip-state-db"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 300
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 20, max_delay_ms: 150 }
+    bulkhead_max_concurrent: 35
+
+  - from: "ride-matchmaker"
+    to: "driver-billing"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 800
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 50, max_delay_ms: 400 }
+    circuit_breaker: { enabled: true, failure_rate_threshold: 0.30, min_calls: 5, open_duration_s: 20, probe_fraction: 0.1 }
+
+seed: 42

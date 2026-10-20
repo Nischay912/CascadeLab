@@ -12,6 +12,7 @@ import {
   Activity,
   Zap,
   Maximize2,
+  Trash2,
 } from 'lucide-react';
 import { ResilienceRing } from './ResilienceRing';
 
@@ -24,6 +25,7 @@ interface TopNavProps {
   onChangeSpeed: (speed: number) => void;
   selectedTemplate: string;
   onSelectTemplate: (templateKey: string) => void;
+  onDeleteCustomArchitecture?: () => void;
   selectedScenario: string;
   onSelectScenario: (scenarioKey: string) => void;
   onAutoHarden: () => void;
@@ -51,6 +53,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onChangeSpeed,
   selectedTemplate,
   onSelectTemplate,
+  onDeleteCustomArchitecture,
   selectedScenario,
   onSelectScenario,
   onAutoHarden,
@@ -111,6 +114,18 @@ export const TopNav: React.FC<TopNavProps> = ({
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        {/* Delete / Unload Custom Architecture Action */}
+        {['imported', 'custom', 'docker-compose'].includes(selectedTemplate) && onDeleteCustomArchitecture && (
+          <button
+            onClick={onDeleteCustomArchitecture}
+            className="px-2 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold hover:shadow-noc"
+            title="Delete / Unload custom imported architecture and revert to default template"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Delete Arch</span>
+          </button>
+        )}
 
         {/* Scenario Selector */}
         <div className="relative group hidden sm:block">

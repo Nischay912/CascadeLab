@@ -1,0 +1,313 @@
+# =========================================================================
+# CascadeLab Architecture Specification: Global Video Streaming & OTT Edge
+# =========================================================================
+# Simulates a high-concurrency OTT video streaming edge infrastructure
+# (HLS/DASH manifest packaging, DRM license verification, CDN origin caching,
+# recommendation engine, and playback QoS telemetry collection).
+# =========================================================================
+
+name: "StreamPulse OTT Video Platform"
+description: "Distributed video streaming edge network with dynamic HLS packaging, CDN caching, DRM token validation, and QoE telemetry."
+
+# Service Level Objectives (SLOs)
+slo:
+  success_pct: 99.9       # High availability requirement for media playback
+  p95_ms: 350             # 350ms p95 manifest delivery SLA
+
+value_per_request_inr: 25 # High customer churn impact on stream stalls
+
+# Workload Profile
+workload:
+  entry: "video-edge-gateway"
+  pattern: "diurnal"      # Prime-time peak viewing evening cycle
+  base_rps: 550           # Steady-state playback manifest requests
+  multiplier: 1.0         # Baseline 1.0x (ramps to 2.2x during live events)
+  duration_s: 180
+  ramp_time_s: 30
+
+# Microservice Fleet
+services:
+  - id: "video-edge-gateway"
+    name: "Edge API & Ingress Gateway"
+    role: "TLS Termination & Session Routing"
+    entry: true
+    position: { x: 80, y: 180 }
+    instances:
+      initial: 5
+      min: 3
+      max: 15
+    concurrency: 80
+    service_time_ms: 6
+    queue_limit: 300
+    load_shedding:
+      enabled: true
+      threshold: 0.88
+    autoscale:
+      enabled: true
+      target_util: 0.65
+      eval_period_s: 10
+      startup_delay_s: 15
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 25
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 3200
+
+  - id: "session-auth"
+    name: "DRM & Session Auth"
+    role: "Widevine/FairPlay Token Verification"
+    position: { x: 270, y: 70 }
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 60
+    service_time_ms: 12
+    queue_limit: 200
+    load_shedding:
+      enabled: false
+      threshold: 0.90
+    autoscale:
+      enabled: true
+      target_util: 0.70
+      eval_period_s: 10
+      startup_delay_s: 15
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 25
+    cost_inr_per_instance_month: 2400
+
+  - id: "manifest-packager"
+    name: "Manifest Packager"
+    role: "Dynamic HLS (.m3u8) & DASH (.mpd) Splicing"
+    position: { x: 270, y: 280 }
+    instances:
+      initial: 4
+      min: 2
+      max: 12
+    concurrency: 50
+    service_time_ms: 18
+    queue_limit: 250
+    load_shedding:
+      enabled: true
+      threshold: 0.85
+    autoscale:
+      enabled: true
+      target_util: 0.65
+      eval_period_s: 10
+      startup_delay_s: 15
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 4200
+
+  - id: "recommendation-ml"
+    name: "Recommendation ML Engine"
+    role: "Next-Watch Personalized Video Feed"
+    position: { x: 470, y: 60 }
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 40
+    service_time_ms: 30
+    queue_limit: 150
+    load_shedding:
+      enabled: true
+      threshold: 0.80
+    autoscale:
+      enabled: true
+      target_util: 0.70
+      eval_period_s: 12
+      startup_delay_s: 20
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 6500
+
+  - id: "cdn-origin-cache"
+    name: "CDN Origin Segment Cache"
+    role: "Distributed In-Memory Video Segment Cache"
+    position: { x: 470, y: 210 }
+    instances:
+      initial: 4
+      min: 2
+      max: 10
+    concurrency: 90
+    service_time_ms: 8
+    queue_limit: 300
+    load_shedding:
+      enabled: false
+      threshold: 0.90
+    autoscale:
+      enabled: true
+      target_util: 0.65
+      eval_period_s: 10
+      startup_delay_s: 15
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 25
+      restart_delay_s: 25
+    cost_inr_per_instance_month: 4800
+
+  - id: "content-store-s3"
+    name: "Cold Object Storage"
+    role: "Encrypted TS/fMP4 Video Chunk Archive"
+    position: { x: 670, y: 210 }
+    instances:
+      initial: 4
+      min: 3
+      max: 10
+    concurrency: 80
+    service_time_ms: 45
+    queue_limit: 400
+    load_shedding:
+      enabled: false
+      threshold: 0.95
+    autoscale:
+      enabled: true
+      target_util: 0.70
+      eval_period_s: 15
+      startup_delay_s: 20
+      cooldown_s: 60
+    crash:
+      enabled: false
+      after_overload_s: 30
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 1800
+
+  - id: "telemetry-collector"
+    name: "QoS Telemetry Collector"
+    role: "Buffer-Ratio, Bitrate & Player Health Ingestion"
+    position: { x: 470, y: 360 }
+    instances:
+      initial: 3
+      min: 2
+      max: 8
+    concurrency: 75
+    service_time_ms: 14
+    queue_limit: 250
+    load_shedding:
+      enabled: true
+      threshold: 0.85
+    autoscale:
+      enabled: true
+      target_util: 0.65
+      eval_period_s: 10
+      startup_delay_s: 15
+      cooldown_s: 60
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 25
+    cost_inr_per_instance_month: 2100
+
+# Edge Interconnections & Resilience Policies
+dependencies:
+  - from: "video-edge-gateway"
+    to: "session-auth"
+    rate: 1.0
+    timeout_ms: 180
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 4
+      reset_timeout_s: 15
+      half_open_success_needed: 3
+    retry:
+      max_attempts: 1
+      backoff: "exponential"
+      initial_delay_ms: 30
+      max_delay_ms: 100
+      jitter: true
+
+  - from: "video-edge-gateway"
+    to: "manifest-packager"
+    rate: 1.0
+    timeout_ms: 300
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 5
+      reset_timeout_s: 20
+      half_open_success_needed: 3
+    retry:
+      max_attempts: 2
+      backoff: "exponential"
+      initial_delay_ms: 40
+      max_delay_ms: 150
+      jitter: true
+
+  - from: "video-edge-gateway"
+    to: "recommendation-ml"
+    rate: 0.6
+    timeout_ms: 220
+    fallback:
+      enabled: true
+      mode: "static"
+      static_response: '{"status":"ok","source":"cache","recommendations":["top-10-global","action-hits"]}'
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 3
+      reset_timeout_s: 15
+      half_open_success_needed: 2
+    retry:
+      max_attempts: 1
+      backoff: "fixed"
+      initial_delay_ms: 25
+      max_delay_ms: 50
+      jitter: false
+
+  - from: "video-edge-gateway"
+    to: "telemetry-collector"
+    rate: 0.8
+    timeout_ms: 120
+    circuit_breaker:
+      enabled: false
+      failure_threshold: 5
+      reset_timeout_s: 15
+      half_open_success_needed: 2
+    retry:
+      max_attempts: 0
+      backoff: "none"
+      initial_delay_ms: 0
+      max_delay_ms: 0
+      jitter: false
+
+  - from: "manifest-packager"
+    to: "cdn-origin-cache"
+    rate: 1.0
+    timeout_ms: 250
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 4
+      reset_timeout_s: 15
+      half_open_success_needed: 3
+    retry:
+      max_attempts: 2
+      backoff: "exponential"
+      initial_delay_ms: 30
+      max_delay_ms: 120
+      jitter: true
+
+  - from: "cdn-origin-cache"
+    to: "content-store-s3"
+    rate: 0.25             # 75% cache hit ratio on CDN, 25% cache miss reads S3
+    timeout_ms: 500
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 5
+      reset_timeout_s: 20
+      half_open_success_needed: 3
+    retry:
+      max_attempts: 2
+      backoff: "exponential"
+      initial_delay_ms: 50
+      max_delay_ms: 200
+      jitter: true

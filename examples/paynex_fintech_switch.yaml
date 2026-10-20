@@ -21,8 +21,8 @@ value_per_request_inr: 120
 workload:
   entry: "pay-gateway"
   pattern: "diurnal"
-  base_rps: 750
-  multiplier: 1.5
+  base_rps: 500
+  multiplier: 1.0
   duration_s: 180
   ramp_time_s: 20
 
@@ -62,7 +62,7 @@ services:
     name: "Payment Switch Core"
     role: "Transaction Routing & State Machine"
     position: { x: 380, y: 300 }
-    instances: { initial: 5, min: 3, max: 12 }
+    instances: { initial: 6, min: 3, max: 14 }
     concurrency: 40
     service_time_ms: 18
     queue_limit: 250
@@ -134,7 +134,7 @@ services:
     name: "National Clearing Switch"
     role: "External Settlement Network (NPCI/Visa)"
     position: { x: 980, y: 280 }
-    instances: { initial: 3, min: 2, max: 6 }
+    instances: { initial: 4, min: 2, max: 8 }
     concurrency: 30
     service_time_ms: 65
     queue_limit: 150

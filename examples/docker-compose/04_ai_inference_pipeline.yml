@@ -1,0 +1,57 @@
+version: '3.8'
+
+# =========================================================================
+# Demo Example 4: Generative AI Inference & Vector Search Pipeline
+# =========================================================================
+# Real-time LLM inference cluster with prompt sanitization, vector search
+# embeddings, streaming response cache, and audit logging.
+# =========================================================================
+
+services:
+  llm-ingress:
+    image: traefik:v2.10
+    ports:
+      - "8080:8080"
+    deploy:
+      replicas: 3
+    depends_on:
+      - prompt-sanitizer
+      - inference-router
+
+  prompt-sanitizer:
+    image: python:3.11-slim
+    deploy:
+      replicas: 3
+    depends_on:
+      - session-cache
+
+  inference-router:
+    image: golang:1.22-alpine
+    deploy:
+      replicas: 4
+    depends_on:
+      - vector-db
+      - model-worker
+      - audit-db
+
+  vector-db:
+    image: qdrant/qdrant:v1.7
+    deploy:
+      replicas: 3
+
+  model-worker:
+    image: vllm/vllm-openai:latest
+    deploy:
+      replicas: 4
+    depends_on:
+      - session-cache
+
+  session-cache:
+    image: redis:7-alpine
+    deploy:
+      replicas: 2
+
+  audit-db:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 2
