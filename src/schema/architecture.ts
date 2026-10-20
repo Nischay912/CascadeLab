@@ -53,6 +53,7 @@ export const ServiceSpecSchema = z.object({
   }),
   cost_inr_per_instance_month: z.number().min(0).default(2500),
   zone_spread: z.array(z.string()).default(['a', 'b']),
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 
 export type ServiceSpec = Omit<z.infer<typeof ServiceSpecSchema>, 'entry'> & {

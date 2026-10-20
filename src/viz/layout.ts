@@ -105,15 +105,16 @@ export function computeGraphLayout(
   // Execute Dagre layout
   dagre.layout(dagreGraph);
 
-  // Extract positioned nodes using Dagre's computed coordinates
+  // Extract positioned nodes using Dagre's computed coordinates (or custom position if defined)
   const positionedNodes: LayoutedNode[] = spec.services.map((service) => {
     const n = dagreGraph.node(service.id);
+    const customPos = (service as any).position;
     return {
       id: service.id,
       type: 'serviceNode',
       position: {
-        x: Math.round(n.x - nodeWidth / 2),
-        y: Math.round(n.y - nodeHeight / 2),
+        x: customPos?.x != null ? Number(customPos.x) : Math.round(n.x - nodeWidth / 2),
+        y: customPos?.y != null ? Number(customPos.y) : Math.round(n.y - nodeHeight / 2),
       },
       data: {
         service,

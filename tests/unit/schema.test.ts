@@ -163,6 +163,29 @@ networks:
       expect(parsedSpec.services.length).toBe(shopFastHardenedTemplate.services.length);
       expect(parsedSpec.edges.length).toBe(shopFastHardenedTemplate.edges.length);
     });
+
+    it('successfully parses and validates the enterprise YAML boilerplate and PayNex fintech architecture', () => {
+      const fs = require('fs');
+      const path = require('path');
+
+      const boilerplateStr = fs.readFileSync(path.resolve(__dirname, '../../examples/cascadelab_boilerplate.yaml'), 'utf-8');
+      const boilerplateSpec = parseArchitectureYamlOrJson(boilerplateStr);
+      expect(boilerplateSpec.name).toBe('Enterprise Microservices Platform');
+      expect(boilerplateSpec.services.length).toBe(5);
+      expect(boilerplateSpec.edges.length).toBe(4);
+
+      const fintechStr = fs.readFileSync(path.resolve(__dirname, '../../examples/paynex_fintech_switch.yaml'), 'utf-8');
+      const fintechSpec = parseArchitectureYamlOrJson(fintechStr);
+      expect(fintechSpec.name).toBe('PayNex Payment Switch');
+      expect(fintechSpec.services.length).toBe(8);
+      expect(fintechSpec.edges.length).toBe(7);
+
+      // Verify custom positions are respected
+      const layout = computeGraphLayout(fintechSpec);
+      const gatewayNode = layout.nodes.find((n) => n.id === 'pay-gateway');
+      expect(gatewayNode?.position.x).toBe(80);
+      expect(gatewayNode?.position.y).toBe(190);
+    });
   });
 
   describe('Graph Auto-Layout with Dagre', () => {

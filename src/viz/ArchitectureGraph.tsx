@@ -394,6 +394,170 @@ export const ArchitectureGraph: React.FC<{
     }
   };
 
+  const sampleArchitectureYaml = useMemo(
+    () => `# =========================================================================
+# CascadeLab Architecture Specification Boilerplate
+# =========================================================================
+# Use this boilerplate to simulate and monitor your microservices topology.
+# Adjust services, edges, queue depths, SLOs, and resilience policies.
+
+name: "Enterprise Microservices Platform"
+description: "Distributed cloud microservice topology with autoscaling and circuit breakers."
+
+# 1. Target Service Level Objectives (SLOs)
+slo:
+  success_pct: 99.5       # Availability target (e.g. 99.5%)
+  p95_ms: 500             # Target p95 latency ceiling in ms
+value_per_request_inr: 50 # Revenue earned per successful transaction in ₹
+
+# 2. Offered Workload & Entry Ingress
+workload:
+  entry: "api-gateway"    # ID of the service receiving user requests
+  pattern: "constant"     # Options: constant, ramp, spike, diurnal, flash_sale
+  base_rps: 600           # Steady-state offered requests per second
+  multiplier: 1.0         # Traffic surge multiplier (e.g. 2.5 for surge)
+  duration_s: 180         # Total simulation window in seconds
+  ramp_time_s: 30         # Duration of initial ramp phase
+
+# 3. Microservice Fleet
+services:
+  - id: "api-gateway"
+    name: "API Gateway"
+    role: "Edge Ingress & Routing"
+    entry: true
+    # Optional canvas coordinate. Remove 'position' to enable Dagre auto-layout.
+    position: { x: 100, y: 180 }
+    instances:
+      initial: 4          # Starting replicas
+      min: 2              # Min autoscaling floor
+      max: 12             # Max scaling ceiling
+    concurrency: 50       # Worker concurrency slots per replica
+    service_time_ms: 8    # Own compute latency (excluding dependencies)
+    queue_limit: 250      # Request buffer depth per replica
+    load_shedding:
+      enabled: true       # Drop excess low-priority requests during saturation
+      threshold: 0.85     # Queue saturation ratio (0.1 - 1.0)
+    autoscale:
+      enabled: true
+      target_util: 0.65   # Target worker utilization (65%)
+      eval_period_s: 10   # Metric evaluation window (seconds)
+      startup_delay_s: 15 # Pod cold-boot startup delay
+      cooldown_s: 60      # Downscale cooldown delay
+    crash:
+      enabled: true
+      after_overload_s: 20
+      restart_delay_s: 30
+    cost_inr_per_instance_month: 2500
+    zone_spread: ["a", "b"]
+
+  - id: "order-service"
+    name: "Order Processing Service"
+    role: "Core Business Logic"
+    position: { x: 400, y: 100 }
+    instances: { initial: 3, min: 2, max: 8 }
+    concurrency: 30
+    service_time_ms: 25
+    queue_limit: 150
+    load_shedding: { enabled: true, threshold: 0.80 }
+    autoscale: { enabled: true, target_util: 0.70, eval_period_s: 15, startup_delay_s: 20, cooldown_s: 90 }
+    cost_inr_per_instance_month: 3200
+    zone_spread: ["a", "b"]
+
+  - id: "redis-cache"
+    name: "Redis State Cache"
+    role: "In-Memory Session & Catalog Cache"
+    position: { x: 700, y: 60 }
+    instances: { initial: 2, min: 2, max: 4 }
+    concurrency: 80
+    service_time_ms: 3
+    queue_limit: 500
+    cost_inr_per_instance_month: 1800
+    zone_spread: ["a", "b"]
+
+  - id: "orders-db"
+    name: "PostgreSQL Database"
+    role: "Relational ACID Store"
+    position: { x: 700, y: 220 }
+    instances: { initial: 2, min: 2, max: 4 }
+    concurrency: 40
+    service_time_ms: 18
+    queue_limit: 200
+    cost_inr_per_instance_month: 6000
+    zone_spread: ["a", "b"]
+
+  - id: "payment-gateway"
+    name: "Payment Partner API"
+    role: "External Settlement Provider"
+    position: { x: 1000, y: 180 }
+    instances: { initial: 2, min: 2, max: 4 }
+    concurrency: 25
+    service_time_ms: 80
+    queue_limit: 100
+    cost_inr_per_instance_month: 0
+    zone_spread: ["a"]
+
+# 4. Directed Call Graph & Resilience Policies
+edges:
+  - from: "api-gateway"
+    to: "order-service"
+    calls_per_request: 1.0
+    mode: "sync"          # sync or async
+    critical: true        # If callee fails, does caller fail?
+    timeout_ms: 600       # Deadline timeout
+    retries: 2            # Retries on failure
+    backoff:
+      mode: "exponential" # none, fixed, or exponential
+      jitter: true        # Random jitter to prevent retry storms
+      base_delay_ms: 50
+      max_delay_ms: 500
+    circuit_breaker:
+      enabled: true
+      failure_rate_threshold: 0.40
+      min_calls: 10
+      open_duration_s: 15
+      probe_fraction: 0.1
+
+  - from: "order-service"
+    to: "redis-cache"
+    calls_per_request: 2.0
+    mode: "sync"
+    critical: false       # Soft dependency: fallback to DB if cache misses
+    timeout_ms: 100
+    retries: 1
+    cache:
+      hit_ratio: 0.80     # Absorbs 80% of read traffic
+      warm_time_s: 20
+
+  - from: "order-service"
+    to: "orders-db"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 500
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 30, max_delay_ms: 300 }
+    bulkhead_max_concurrent: 25
+
+  - from: "order-service"
+    to: "payment-gateway"
+    calls_per_request: 1.0
+    mode: "sync"
+    critical: true
+    timeout_ms: 1200
+    retries: 1
+    backoff: { mode: "exponential", jitter: true, base_delay_ms: 100, max_delay_ms: 1000 }
+    circuit_breaker:
+      enabled: true
+      failure_rate_threshold: 0.35
+      min_calls: 5
+      open_duration_s: 20
+      probe_fraction: 0.1
+
+seed: 42
+`,
+    []
+  );
+
   const sampleDockerCompose = useMemo(
     () => `version: '3.8'
 services:
@@ -425,7 +589,7 @@ services:
         <GraphCanvasInner
           {...props}
           onOpenImport={() => {
-            setInputText(sampleDockerCompose);
+            setInputText(sampleArchitectureYaml);
             setImportError(null);
             setModalMode('import');
           }}
@@ -437,7 +601,7 @@ services:
       {/* Modal Dialog for Import / Export / Share */}
       {modalMode && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-surface border border-border rounded-xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-3xl bg-surface border border-border rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-4 border-b border-border flex items-center justify-between bg-surface-raised">
               <div className="flex items-center gap-2">
@@ -474,23 +638,31 @@ services:
                 </div>
               ) : (
                 <div className="h-full flex flex-col">
-                  <div className="flex items-center justify-between mb-1 text-[11px] text-text-muted">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2 text-[11px] text-text-muted">
                     <span>
                       {modalMode === 'import'
-                        ? 'Paste docker-compose.yml or CascadeLab architecture YAML/JSON:'
+                        ? 'Paste CascadeLab Architecture YAML/JSON or docker-compose.yml:'
                         : 'Current Architecture Specification YAML:'}
                     </span>
                     {modalMode === 'import' && (
-                      <button
-                        onClick={() => setInputText(sampleDockerCompose)}
-                        className="text-accent underline text-[10px]"
-                      >
-                        Load sample docker-compose
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setInputText(sampleArchitectureYaml)}
+                          className="px-2 py-0.5 rounded bg-accent/15 text-accent hover:bg-accent/25 border border-accent/30 text-[10px] font-semibold transition-colors"
+                        >
+                          Load Full Boilerplate (YAML)
+                        </button>
+                        <button
+                          onClick={() => setInputText(sampleDockerCompose)}
+                          className="px-2 py-0.5 rounded bg-surface hover:bg-surface-raised border border-border text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                        >
+                          Load Docker-Compose Sample
+                        </button>
+                      </div>
                     )}
                   </div>
                   <textarea
-                    rows={14}
+                    rows={18}
                     value={inputText}
                     readOnly={modalMode === 'export'}
                     onChange={(e) => setInputText(e.target.value)}

@@ -105,6 +105,9 @@ export const TopNav: React.FC<TopNavProps> = ({
             <option value="streaming">Video Streaming Edge</option>
             <option value="payments">UPI / Payments Switch</option>
             <option value="quickcommerce">Quick-Commerce Delivery</option>
+            {['imported', 'custom', 'docker-compose'].includes(selectedTemplate) && (
+              <option value={selectedTemplate}>Custom Architecture (Imported)</option>
+            )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
