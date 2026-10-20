@@ -13,9 +13,11 @@ import {
   Zap,
   Maximize2,
   Trash2,
+  Bot,
 } from 'lucide-react';
 import { ResilienceRing } from './ResilienceRing';
 import { CustomArchitectureEntry } from '../state/useArchitectureStore';
+import { DefconLevel } from '../commander/types';
 
 interface TopNavProps {
   isRunning: boolean;
@@ -31,6 +33,8 @@ interface TopNavProps {
   selectedScenario: string;
   onSelectScenario: (scenarioKey: string) => void;
   onAutoHarden: () => void;
+  onOpenCommander?: () => void;
+  commanderThreatLevel?: DefconLevel;
   onOpenBreakIt: () => void;
   onOpenDefendIt?: () => void;
   onOpenPostmortem: () => void;
@@ -60,6 +64,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   selectedScenario,
   onSelectScenario,
   onAutoHarden,
+  onOpenCommander,
+  commanderThreatLevel = 'DEFCON_5',
   onOpenBreakIt,
   onOpenDefendIt,
   onOpenPostmortem,
@@ -80,17 +86,17 @@ export const TopNav: React.FC<TopNavProps> = ({
   return (
     <header
       data-testid="top-nav"
-      className="h-14 border-b border-border bg-surface px-3 sm:px-4 flex items-center justify-between gap-2 select-none z-30 flex-shrink-0 w-full overflow-hidden"
+      className="h-14 border-b border-border bg-surface px-2 sm:px-3 flex items-center justify-between gap-1.5 select-none z-30 flex-shrink-0 w-full overflow-hidden"
     >
       {/* Left: Brand + Architecture / Scenario Selectors */}
-      <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(56,189,248,0.3)]">
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center text-accent shadow-[0_0_12px_rgba(56,189,248,0.3)] flex-shrink-0">
             <Zap className="w-4 h-4 fill-current" />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <span className="font-bold text-sm tracking-tight text-text-primary">CascadeLab</span>
-            <span className="px-1.5 py-0.5 text-xs font-mono bg-accent/20 text-accent rounded font-bold border border-accent/30">
+            <span className="px-1.5 py-0.5 text-xs font-mono bg-accent/20 text-accent rounded font-bold border border-accent/30 hidden md:inline">
               NOC
             </span>
           </div>
@@ -103,7 +109,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           <select
             value={selectedTemplate}
             onChange={(e) => onSelectTemplate(e.target.value)}
-            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[140px] sm:max-w-[175px] truncate"
+            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[130px] sm:max-w-[155px] truncate"
             title="Switch microservices architecture"
           >
             <optgroup label="Default Benchmark Architectures">
@@ -141,11 +147,10 @@ export const TopNav: React.FC<TopNavProps> = ({
           onDeleteCustomArchitecture && (
             <button
               onClick={onDeleteCustomArchitecture}
-              className="px-2 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold hover:shadow-noc active:scale-95"
+              className="p-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center justify-center hover:shadow-noc active:scale-95 flex-shrink-0"
               title="Delete current custom architecture"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Delete Arch</span>
             </button>
           )}
 
@@ -154,7 +159,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           <select
             value={selectedScenario}
             onChange={(e) => onSelectScenario(e.target.value)}
-            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[145px] lg:max-w-[175px] truncate"
+            className="appearance-none bg-surface-raised hover:bg-surface-hover border border-border text-text-primary text-xs font-medium py-1.5 pl-2 pr-6 rounded-md cursor-pointer transition-colors focus:outline-none focus:border-accent max-w-[130px] lg:max-w-[155px] truncate"
           >
             <option value="baseline">Baseline (600 RPS, Normal)</option>
             <option value="flash_sale">Flash Sale (3x Surge Peak)</option>
@@ -242,22 +247,22 @@ export const TopNav: React.FC<TopNavProps> = ({
           ))}
         </div>
 
-        <div className="h-4 w-[1px] bg-border mx-0.5 hidden xl:block" />
-        <span className="text-xs font-mono text-text-muted px-1 hidden xl:inline" title="Deterministic Mulberry32 seed">
+        <div className="h-4 w-[1px] bg-border mx-0.5 hidden 2xl:block" />
+        <span className="text-xs font-mono text-text-muted px-1 hidden 2xl:inline" title="Deterministic Mulberry32 seed">
           Seed: <span className="text-text-primary font-bold">42</span>
         </span>
       </div>
 
       {/* Right: Live Telemetry & Actions (Fits cleanly without overflowing) */}
-      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
         {/* Live Scenario Ingress Success Pill */}
         <div
           data-testid="live-success"
-          className="flex items-center gap-1 sm:gap-1.5 bg-surface-raised px-2 sm:px-2.5 py-1 rounded-md border border-border text-xs font-mono"
+          className="flex items-center gap-1 bg-surface-raised px-2 py-1 rounded-md border border-border text-xs font-mono flex-shrink-0"
           title="Live Scenario Ingress Success Rate (SLO target: 99.0%)"
         >
           <span
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
               userSuccessRate >= 99
                 ? 'bg-status-healthy animate-pulse'
                 : userSuccessRate >= 90
@@ -268,7 +273,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           <span className="font-bold text-text-primary tabular-nums">
             {userSuccessRate.toFixed(1)}%
           </span>
-          <span className="text-[11px] text-text-muted hidden md:inline">Live</span>
+          <span className="text-[11px] text-text-muted hidden xl:inline">Live</span>
         </div>
 
         {/* p95 Pill (Only on wide 1750px+ screens; also permanently displayed in footer timeline) */}
@@ -326,7 +331,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               >
                 ₹ {Math.round(cumulativeMoneyLostInr).toLocaleString('en-IN')}
               </span>
-              <span className="text-[10px] text-text-dim hidden md:inline">lost</span>
+              <span className="text-[10px] text-text-dim hidden xl:inline">lost</span>
               <span className="text-[9px] text-accent/70 hover:text-accent ml-0.5 hidden min-[1750px]:inline" title="Gross Merchandise Value per transaction">(₹{valuePerRequestInr})</span>
             </>
           )}
@@ -339,14 +344,47 @@ export const TopNav: React.FC<TopNavProps> = ({
         <button
           onClick={onAutoHarden}
           title="Auto-Harden optimizer (searches optimal circuit breakers, timeouts, retries)"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-accent to-blue-500 text-background font-bold text-xs rounded-md shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:brightness-110 active:scale-95 transition-all"
+          className="flex items-center gap-1.5 px-2 py-1.5 bg-gradient-to-r from-accent to-blue-500 text-background font-bold text-xs rounded-md shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:brightness-110 active:scale-95 transition-all flex-shrink-0"
         >
-          <ShieldAlert className="w-3.5 h-3.5" />
+          <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
           <span className="hidden sm:inline">Auto-Harden</span>
         </button>
 
+        {/* AI Autonomous Incident Commander Action */}
+        {onOpenCommander && (
+          <button
+            onClick={onOpenCommander}
+            title="Open AI Autonomous Incident Commander (AIOps Threat Radar & Self-Healing)"
+            className={`flex items-center gap-1.5 px-2 py-1.5 font-bold text-xs rounded-md transition-all active:scale-95 border flex-shrink-0 ${
+              commanderThreatLevel === 'DEFCON_1'
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.35)] animate-pulse'
+                : commanderThreatLevel === 'DEFCON_2'
+                ? 'bg-orange-500/20 text-orange-300 border-orange-500/50 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
+                : commanderThreatLevel === 'DEFCON_3'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                : 'bg-surface-raised hover:bg-surface-hover text-text-primary border-border hover:border-accent/50'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+            <span className="hidden min-[1650px]:inline">AI Commander</span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold leading-none flex-shrink-0 ${
+                commanderThreatLevel === 'DEFCON_1'
+                  ? 'bg-rose-500 text-white'
+                  : commanderThreatLevel === 'DEFCON_2'
+                  ? 'bg-orange-500 text-white'
+                  : commanderThreatLevel === 'DEFCON_3'
+                  ? 'bg-amber-500 text-black'
+                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+              }`}
+            >
+              {commanderThreatLevel ? commanderThreatLevel.replace('_', ' ') : 'DEFCON 5'}
+            </span>
+          </button>
+        )}
+
         {/* Quick Tools */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={onOpenBreakIt}
             title="Break It! (Chaos Challenge Game)"

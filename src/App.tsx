@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TopNav } from './ui/TopNav';
 import { LeftPanel } from './ui/LeftPanel';
 import { MainCanvas } from './ui/MainCanvas';
@@ -27,6 +27,10 @@ import {
 import { shopFastNaiveTemplate } from './schema/templates';
 import { PostmortemModal, generatePostmortem, PostmortemData } from './postmortem';
 import { DeleteArchitectureModal } from './ui/DeleteArchitectureModal';
+import { useCommanderStore } from './commander/useCommanderStore';
+import { evaluateIncidentCommander, formatMissionTime } from './commander/engine';
+import { CommanderMitigation } from './commander/types';
+import { AICommanderModal } from './commander/AICommanderModal';
 import { ShieldAlert } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -82,6 +86,20 @@ export const App: React.FC = () => {
   const [activeCanvasTab, setActiveCanvasTab] = useState<
     'graph' | 'split' | 'optimizer' | 'chaos' | 'capacity' | 'reality'
   >('graph');
+
+  // AI Autonomous Incident Commander State
+  const {
+    isCommanderOpen,
+    mode: commanderMode,
+    threatLevel: commanderThreatLevel,
+    setIsCommanderOpen,
+    setThreatLevel,
+    setActiveMitigation,
+    addLogs,
+    recordMitigationApplied,
+  } = useCommanderStore();
+
+  const lastAutonomousExecutionRef = useRef<number>(-1);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -171,6 +189,77 @@ export const App: React.FC = () => {
     if (historyUpToNow.length === 0) return null;
     return analyzeSimulationIncident(currentSpec, historyUpToNow);
   }, [currentSpec, history, currentTime, currentMetrics]);
+
+  // AI Autonomous Incident Commander: Continuous Threat Evaluation & Self-Healing Loop
+  useEffect(() => {
+    const evaluation = evaluateIncidentCommander(
+      currentSpec,
+      currentMetrics,
+      currentTime,
+      rootCause
+    );
+
+    setThreatLevel(evaluation.threatLevel);
+    setActiveMitigation(evaluation.prescribedMitigation);
+
+    if (evaluation.newLogs.length > 0) {
+      addLogs(evaluation.newLogs);
+    }
+
+    // Auto-Pilot Autonomous Self-Healing Directive
+    if (
+      commanderMode === 'autonomous' &&
+      evaluation.threatLevel !== 'DEFCON_5' &&
+      evaluation.threatLevel !== 'DEFCON_4' &&
+      evaluation.prescribedMitigation &&
+      lastAutonomousExecutionRef.current !== currentTime
+    ) {
+      lastAutonomousExecutionRef.current = currentTime;
+      const updated = evaluation.prescribedMitigation.apply(currentSpec);
+      setSpec(updated);
+      recordMitigationApplied();
+      addLogs([
+        {
+          id: `auto_${Date.now()}`,
+          time: currentTime,
+          timestamp: formatMissionTime(currentTime),
+          level: 'action',
+          title: 'Autonomous Self-Healing Action Executed',
+          message: `AI Commander autonomously executed '${evaluation.prescribedMitigation.title}'. Mitigated bottleneck and restored system SLO.`,
+        },
+      ]);
+    }
+  }, [
+    currentSpec,
+    currentMetrics,
+    currentTime,
+    rootCause,
+    commanderMode,
+    setThreatLevel,
+    setActiveMitigation,
+    addLogs,
+    recordMitigationApplied,
+    setSpec,
+  ]);
+
+  const handleApplyCommanderMitigation = useCallback(
+    (mitigation: CommanderMitigation) => {
+      const updated = mitigation.apply(currentSpec);
+      setSpec(updated);
+      recordMitigationApplied();
+      addLogs([
+        {
+          id: `auth_${Date.now()}`,
+          time: currentTime,
+          timestamp: formatMissionTime(currentTime),
+          level: 'action',
+          title: 'Mitigation Authorized & Deployed',
+          message: `Human SRE authorized '${mitigation.title}'. Resilience policy applied to Digital Twin.`,
+        },
+      ]);
+    },
+    [currentSpec, currentTime, setSpec, recordMitigationApplied, addLogs]
+  );
 
   const handleRunLinter = () => {
     setIsAnalyzing(true);
@@ -373,6 +462,8 @@ export const App: React.FC = () => {
         onSelectScenario={handleScenarioChange}
         resilienceScore={chaosResilienceScore}
         onAutoHarden={handleAutoHarden}
+        onOpenCommander={() => setIsCommanderOpen(true)}
+        commanderThreatLevel={commanderThreatLevel}
         onOpenBreakIt={() => setIsBreakItOpen(true)}
         onOpenDefendIt={() => setIsDefendItOpen(true)}
         onOpenPostmortem={() => {
@@ -627,6 +718,16 @@ export const App: React.FC = () => {
           setSpeed(1);
           setIsDeleteModalOpen(false);
         }}
+      />
+
+      {/* AI Autonomous Incident Commander Modal */}
+      <AICommanderModal
+        isOpen={isCommanderOpen}
+        onClose={() => setIsCommanderOpen(false)}
+        currentSpec={currentSpec}
+        onApplyMitigation={handleApplyCommanderMitigation}
+        onTriggerChaosScenario={(sc) => handleScenarioChange(sc)}
+        resilienceScore={chaosResilienceScore}
       />
     </div>
   );

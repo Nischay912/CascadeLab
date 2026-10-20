@@ -11,6 +11,14 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.env
+*.key
+*.pem
+
 node_modules
 dist
 dist-ssr
