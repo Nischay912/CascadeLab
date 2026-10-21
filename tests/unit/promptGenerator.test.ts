@@ -145,6 +145,38 @@ describe('Prompt-to-Architecture Natural Language Topology Engine', () => {
     expect(Number.isFinite(history[15].userSuccessRate)).toBe(true);
   });
 
+  it('correctly executes structural commands like "where tier 2 has 3 services like single duo and squads"', () => {
+    const pubgPrompt =
+      'pubg mobile architecture where tier 2 has 3 services like single duo and squads';
+
+    const result = synthesizeArchitectureFromPrompt(pubgPrompt, {
+      trafficScale: 'medium',
+      mode: 'fragile_naive',
+      includeSpof: true,
+    });
+
+    // Verify against Zod schema
+    const parsed = ArchitectureSpecSchema.safeParse(result.spec);
+    expect(parsed.success).toBe(true);
+
+    // Verify domain and title
+    expect(result.summary.domain).toBe('Gaming & Multiplayer Grid');
+    expect(result.summary.architectureName).toContain('PUBG Mobile');
+
+    // Verify Tier 2 contains exactly the 3 requested services
+    const tier2Services = result.summary.tiers.find((t) => t.tierName.includes('Tier 2'))?.services || [];
+    expect(tier2Services.length).toBe(3);
+    expect(tier2Services.some((s) => s.toLowerCase().includes('single'))).toBe(true);
+    expect(tier2Services.some((s) => s.toLowerCase().includes('duo'))).toBe(true);
+    expect(tier2Services.some((s) => s.toLowerCase().includes('squad'))).toBe(true);
+
+    // Verify runnable in SimulationEngine
+    const engine = new SimulationEngine(result.spec, 42);
+    const history = engine.runBatch(30);
+    expect(history.length).toBe(31);
+    expect(Number.isFinite(history[10].userSuccessRate)).toBe(true);
+  });
+
   it('runs successfully through SimulationEngine with zero NaN metrics', () => {
     const prompt =
       'Generate an Uber-like ride-hailing architecture with a geospatial matching service, a surge pricing cache, and an external payment gateway.';

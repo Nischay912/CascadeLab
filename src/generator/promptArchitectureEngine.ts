@@ -151,7 +151,7 @@ export function validatePromptIntent(prompt: string): PromptValidationResult {
   const trimmed = prompt.trim();
   const lower = trimmed.toLowerCase();
 
-  // 1. Conversational greetings and small talk (e.g., "hi how are you", "hello", "hey there")
+  // 1. Conversational greetings and small talk (e.g., "hi how are you", "hello", "hey there", "who are you")
   const isGreeting =
     /^(hi+|hello+|hey+|howdy|hola|namaste|sup|yo|greetings)\b/i.test(lower) ||
     /\b(how\s+are\s+you|who\s+are\s+you|what\s+is\s+your\s+name|what\s+is\s+up|what's\s+up|are\s+you\s+ai|tell\s+me\s+a\s+joke|thank\s*(you|s)?|good\s+(morning|afternoon|evening|night|day))\b/i.test(
@@ -296,6 +296,17 @@ export function validatePromptIntent(prompt: string): PromptValidationResult {
     'pipeline',
     'node',
     'component',
+    'pubg',
+    'fortnite',
+    'apex',
+    'cod',
+    'valorant',
+    'squad',
+    'squads',
+    'duo',
+    'single',
+    'solo',
+    'tier',
   ];
 
   const hasArchKeyword = ARCH_VOCABULARY.some((term) => lower.includes(term));
@@ -316,6 +327,24 @@ export function validatePromptIntent(prompt: string): PromptValidationResult {
 // ============================================================================
 export function detectDomainFromPrompt(prompt: string): string {
   const normalized = prompt.toLowerCase();
+  if (
+    normalized.includes('game') ||
+    normalized.includes('gaming') ||
+    normalized.includes('matchmak') ||
+    normalized.includes('lobby') ||
+    normalized.includes('multiplayer') ||
+    normalized.includes('mmr') ||
+    normalized.includes('pubg') ||
+    normalized.includes('fortnite') ||
+    normalized.includes('apex') ||
+    normalized.includes('battle royale') ||
+    normalized.includes('squads') ||
+    normalized.includes('squad') ||
+    normalized.includes('duo') ||
+    normalized.includes('esport')
+  ) {
+    return 'gaming';
+  }
   if (
     normalized.includes('uber') ||
     normalized.includes('ride') ||
@@ -356,7 +385,8 @@ export function detectDomainFromPrompt(prompt: string): string {
     normalized.includes('ledger') ||
     normalized.includes('transfer') ||
     normalized.includes('settlement') ||
-    normalized.includes('npci')
+    normalized.includes('npci') ||
+    normalized.includes('crypto')
   ) {
     return 'fintech';
   }
@@ -381,16 +411,6 @@ export function detectDomainFromPrompt(prompt: string): string {
     return 'iot';
   }
   if (
-    normalized.includes('game') ||
-    normalized.includes('gaming') ||
-    normalized.includes('matchmak') ||
-    normalized.includes('lobby') ||
-    normalized.includes('multiplayer') ||
-    normalized.includes('mmr')
-  ) {
-    return 'gaming';
-  }
-  if (
     normalized.includes('shop') ||
     normalized.includes('ecommerce') ||
     normalized.includes('cart') ||
@@ -403,7 +423,7 @@ export function detectDomainFromPrompt(prompt: string): string {
 }
 
 // ============================================================================
-// 3. Dynamic Semantic Entity Extractor
+// 3. Dynamic Semantic Entity Extractor & Directive Parser
 // ============================================================================
 function slugify(text: string): string {
   return text
@@ -420,6 +440,106 @@ function titleCase(text: string): string {
 }
 
 /**
+ * Parses explicit tier commands like:
+ * "where tier 2 has 3 services like single duo and squads"
+ * "tier 2 has services: auth, payment, catalog"
+ * "tier 3 with redis and postgres"
+ */
+function extractTierDirectives(prompt: string, domainKey: string): ExtractedEntity[] {
+  const normalized = prompt.toLowerCase();
+  const results: ExtractedEntity[] = [];
+  const seen = new Set<string>();
+
+  const regex =
+    /(?:tier\s*([1-4])|layer\s*([1-4]))\s*(?:has|with|contains|includes|consists?\s+of)?\s*(?:\d+\s+services?\s*(?:like|such\s+as|called|named)?)?[:\s]+([^.;\n]+)/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(normalized)) !== null) {
+    const tierNum = parseInt(match[1] || match[2], 10);
+    const rawClause = match[3];
+    if (!rawClause) continue;
+
+    const clause = rawClause.split(/\b(?:where\s+tier|and\s+tier|tier\s*\d|layer\s*\d)\b/i)[0];
+    let tokens = clause
+      .split(/,|\band\b|\bor\b|&/i)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    // If user specified an explicit count (e.g. "3 services") and tokens count is less,
+    // split multi-word tokens by whitespace to reach the requested count!
+    const countMatch = match[0].match(/(\d+)\s+services?/i);
+    const expectedCount = countMatch ? parseInt(countMatch[1], 10) : 0;
+    if (expectedCount > 0 && tokens.length < expectedCount) {
+      const expanded: string[] = [];
+      for (const t of tokens) {
+        const parts = t
+          .split(/\s+/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 1 && !['a', 'an', 'the', 'like', 'such', 'as'].includes(p));
+        expanded.push(...parts);
+      }
+      tokens = expanded;
+    }
+
+    const tierMap: Record<number, 'ingress' | 'core' | 'data' | 'external'> = {
+      1: 'ingress',
+      2: 'core',
+      3: 'data',
+      4: 'external',
+    };
+    const tier = tierMap[tierNum] || 'core';
+
+    for (const token of tokens) {
+      const cleaned = token
+        .replace(/\b(a|an|the|services?|service|like|such|as|nodes?)\b/gi, '')
+        .trim();
+      if (!cleaned || cleaned.length < 2) continue;
+
+      const slug = slugify(cleaned);
+      if (seen.has(slug)) continue;
+      seen.add(slug);
+
+      let name = titleCase(cleaned);
+      if (
+        tier === 'core' &&
+        !name.toLowerCase().includes('service') &&
+        !name.toLowerCase().includes('engine') &&
+        !name.toLowerCase().includes('matcher')
+      ) {
+        name = domainKey === 'gaming' ? `${name} Matchmaking Service` : `${name} Service`;
+      } else if (
+        tier === 'data' &&
+        !name.toLowerCase().includes('db') &&
+        !name.toLowerCase().includes('cache') &&
+        !name.toLowerCase().includes('store')
+      ) {
+        name = `${name} Store`;
+      } else if (
+        tier === 'ingress' &&
+        !name.toLowerCase().includes('gateway') &&
+        !name.toLowerCase().includes('router')
+      ) {
+        name = `${name} Gateway`;
+      }
+
+      results.push({
+        id: slug.endsWith('-service') || slug.endsWith('-db') || slug.endsWith('-cache') || slug.endsWith('-gateway') ? slug : `${slug}-service`,
+        name,
+        role: `${name} (Tier ${tierNum})`,
+        tier,
+        service_time_ms: tier === 'data' ? 8 : tier === 'external' ? 120 : tier === 'ingress' ? 5 : 20,
+        initial_instances: tier === 'ingress' ? 4 : 3,
+        concurrency: tier === 'data' ? 60 : 40,
+        queue_limit: tier === 'data' ? 300 : 180,
+        isEntry: tier === 'ingress',
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Extracts custom components from natural language text.
  * Matches patterns like "geospatial matching service", "surge pricing cache", "external payment gateway", "patient records database", etc.
  */
@@ -428,8 +548,6 @@ function extractCustomEntitiesFromPrompt(prompt: string): ExtractedEntity[] {
   const entities: ExtractedEntity[] = [];
   const seenIds = new Set<string>();
 
-  // Regex patterns to capture architectural noun phrases
-  // e.g. "a [geospatial matching] service", "[surge pricing] cache", "[external payment] gateway"
   const patterns: Array<{
     regex: RegExp;
     tier: 'ingress' | 'core' | 'data' | 'external';
@@ -501,7 +619,6 @@ function extractCustomEntitiesFromPrompt(prompt: string): ExtractedEntity[] {
       const baseType = match[2]?.trim();
       if (!baseType) continue;
 
-      // Filter stop words from modifier
       const cleanMod = modifier
         ? modifier
             .replace(/\b(a|an|the|with|and|or|for|of|to|in|our|your|my|some|any|like)\b/gi, '')
@@ -511,7 +628,6 @@ function extractCustomEntitiesFromPrompt(prompt: string): ExtractedEntity[] {
       const fullName = cleanMod ? `${titleCase(cleanMod)} ${titleCase(baseType)}` : titleCase(baseType);
       let id = slugify(cleanMod ? `${cleanMod}-${baseType}` : baseType);
 
-      // Clean up common id variations
       if (id.endsWith('-service-service')) id = id.replace(/-service-service$/, '-service');
       if (id.endsWith('-db-db')) id = id.replace(/-db-db$/, '-db');
       if (id.endsWith('-cache-cache')) id = id.replace(/-cache-cache$/, '-cache');
@@ -534,6 +650,59 @@ function extractCustomEntitiesFromPrompt(prompt: string): ExtractedEntity[] {
   }
 
   return entities;
+}
+
+/**
+ * Intelligent Architecture Title Synthesizer
+ */
+function generateArchitectureTitle(prompt: string, domainKey: string): string {
+  if (/pubg/i.test(prompt)) {
+    return 'PUBG Mobile: Battle Royale Platform';
+  }
+  if (/uber/i.test(prompt)) {
+    return 'RideFlow: Geospatial Fleet Dispatch';
+  }
+  if (/swiggy|zomato/i.test(prompt)) {
+    return 'QuickBite: Autonomous Delivery Grid';
+  }
+  if (/netflix/i.test(prompt)) {
+    return 'StreamCast: Global Video Delivery';
+  }
+  if (domainKey === 'gaming' && (prompt.includes('single') || prompt.includes('duo') || prompt.includes('squad'))) {
+    return 'Battle Royale Matchmaking Grid';
+  }
+
+  // Strip sub-clauses like "where tier 2...", "with 3 services...", "having..."
+  const mainSubject = prompt
+    .split(/\b(?:where|with|having|that\s+has|which\s+has|composed\s+of|including|featuring)\b/i)[0]
+    .trim();
+
+  const cleaned = mainSubject
+    .replace(/^(?:generate|create|design|make|build|simulate|model)\s+(?:an?|the)?\s*/i, '')
+    .trim();
+
+  const words = cleaned
+    .replace(/[^a-zA-Z0-9\s_-]/g, '')
+    .split(/\s+/)
+    .filter(
+      (w) =>
+        w.length > 0 &&
+        !['where', 'with', 'and', 'for', 'the', 'a', 'an', 'has', 'in', 'of', 'like'].includes(w.toLowerCase())
+    );
+
+  if (words.length > 0) {
+    const title = words
+      .slice(0, 4)
+      .map((w) => (w.length <= 4 && w === w.toUpperCase() ? w : titleCase(w)))
+      .join(' ');
+    return title.toLowerCase().includes('architecture') ||
+      title.toLowerCase().includes('platform') ||
+      title.toLowerCase().includes('system')
+      ? title
+      : `${title} Platform`;
+  }
+
+  return 'Custom Distributed System';
 }
 
 // ============================================================================
@@ -559,74 +728,57 @@ export function synthesizeArchitectureFromPrompt(
 
   // 2. Classify Domain & Baseline Traffic
   const domainKey = detectDomainFromPrompt(prompt);
-  let domain = 'Custom Microservices';
-  let archName = 'Custom Distributed System';
-  let defaultBaseRps = 600;
+  let domain = 'Custom Architecture';
+  const archName = generateArchitectureTitle(prompt, domainKey);
+  let defaultBaseRps = 650;
   let defaultPattern: 'constant' | 'ramp' | 'spike' | 'diurnal' | 'flash_sale' = 'constant';
 
   switch (domainKey) {
+    case 'gaming':
+      domain = 'Gaming & Multiplayer Grid';
+      defaultBaseRps = 850;
+      defaultPattern = 'spike';
+      break;
     case 'ridehailing':
       domain = 'Mobility & Ride-Hailing';
-      archName = 'RideFlow: Geospatial Fleet Dispatch';
       defaultBaseRps = 800;
       defaultPattern = 'diurnal';
       break;
     case 'food_delivery':
       domain = 'Quick-Commerce & Food Delivery';
-      archName = 'QuickBite: Autonomous Delivery Grid';
       defaultBaseRps = 750;
       defaultPattern = 'flash_sale';
       break;
     case 'streaming':
       domain = 'Media Streaming & CDN';
-      archName = 'StreamCast: Global Video Delivery';
       defaultBaseRps = 1000;
       defaultPattern = 'constant';
       break;
     case 'fintech':
       domain = 'Fintech & Banking Switch';
-      archName = 'PaySwitch: Real-Time Payment Hub';
       defaultBaseRps = 900;
       defaultPattern = 'spike';
       break;
     case 'genai':
       domain = 'Generative AI & LLM Systems';
-      archName = 'NeuroMesh: Multi-Agent AI Pipeline';
       defaultBaseRps = 400;
       defaultPattern = 'ramp';
       break;
     case 'iot':
       domain = 'IoT & Telemetry Streaming';
-      archName = 'IoTSphere: Edge Sensor Pipeline';
       defaultBaseRps = 1100;
       defaultPattern = 'ramp';
       break;
-    case 'gaming':
-      domain = 'Gaming & Multiplayer Grid';
-      archName = 'ArenaGrid: Real-Time Matchmaking';
-      defaultBaseRps = 850;
-      defaultPattern = 'spike';
-      break;
     case 'ecommerce':
       domain = 'E-Commerce & Retail';
-      archName = 'ShopScale: Resilient E-Commerce';
       defaultBaseRps = 700;
       defaultPattern = 'flash_sale';
       break;
-    default: {
-      // Derive a dynamic domain title from key words in prompt
-      const firstFew = prompt
-        .trim()
-        .split(/\s+/)
-        .slice(0, 4)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(' ');
+    default:
       domain = 'Custom Architecture';
-      archName = `${firstFew} Platform`;
       defaultBaseRps = 650;
       defaultPattern = 'constant';
       break;
-    }
   }
 
   // Determine Traffic RPS
@@ -639,21 +791,35 @@ export function synthesizeArchitectureFromPrompt(
     defaultPattern = 'flash_sale';
   }
 
-  // 3. Dynamic Entity Extraction & Assembly
-  // First, extract any explicit components mentioned in the user's prompt
-  const extracted = extractCustomEntitiesFromPrompt(prompt);
+  // 3. Dynamic Entity Extraction
+  // A. Extract explicit tier directives (e.g. "tier 2 has 3 services like single duo and squads")
+  const tierDirectives = extractTierDirectives(prompt, domainKey);
+  // B. Extract component noun phrases
+  const customEntities = extractCustomEntitiesFromPrompt(prompt);
+
   const entities: ExtractedEntity[] = [];
+  const addedIds = new Set<string>();
 
   // Ingress Gateway: always ensure an Entry Gateway is present
-  const hasExplicitIngress = extracted.some((e) => e.tier === 'ingress');
+  const hasExplicitIngress =
+    tierDirectives.some((e) => e.tier === 'ingress') || customEntities.some((e) => e.tier === 'ingress');
+
   if (hasExplicitIngress) {
-    const ing = extracted.find((e) => e.tier === 'ingress')!;
+    const ing =
+      tierDirectives.find((e) => e.tier === 'ingress') || customEntities.find((e) => e.tier === 'ingress')!;
     ing.isEntry = true;
     entities.push(ing);
+    addedIds.add(ing.id);
   } else {
+    const gatewayName =
+      domainKey === 'gaming'
+        ? 'Game API Gateway'
+        : domainKey === 'iot'
+        ? 'MQTT Ingress Gateway'
+        : 'API Gateway';
     entities.push({
       id: 'api-gateway',
-      name: domain.includes('IoT') ? 'MQTT / Ingress Gateway' : 'API Gateway',
+      name: gatewayName,
       role: 'Edge Ingress & Request Router',
       tier: 'ingress',
       service_time_ms: 5,
@@ -662,31 +828,90 @@ export function synthesizeArchitectureFromPrompt(
       queue_limit: 250,
       isEntry: true,
     });
+    addedIds.add('api-gateway');
   }
 
-  // Add all non-ingress extracted components
-  for (const item of extracted) {
-    if (item.tier !== 'ingress' && !entities.some((e) => e.id === item.id)) {
+  // Priority 1: Add all explicit tier directives from user commands
+  for (const item of tierDirectives) {
+    if (!addedIds.has(item.id)) {
+      addedIds.add(item.id);
       entities.push(item);
     }
   }
 
-  // Domain-Specific Intelligence & Augmentation
-  // If user asked for a specific domain, ensure standard critical tiers are populated
-  if (domainKey === 'ridehailing') {
-    if (!entities.some((e) => e.id.includes('auth'))) {
+  // Priority 2: Add all custom noun-phrase entities
+  for (const item of customEntities) {
+    if (!addedIds.has(item.id)) {
+      addedIds.add(item.id);
+      entities.push(item);
+    }
+  }
+
+  // 4. Domain-Specific Intelligence & Augmentation
+  // Only augment missing tiers so we don't overwrite the user's explicit command!
+  const hasUserCore = entities.some((e) => e.tier === 'core');
+
+  if (domainKey === 'gaming') {
+    if (!hasUserCore) {
       entities.push({
-        id: 'auth-service',
-        name: 'Auth & Security Service',
-        role: 'Driver & Passenger Token Verification',
+        id: 'matchmaker-engine',
+        name: 'Matchmaker Rating Engine',
+        role: 'MMR & Skill-Based Player Grouping',
         tier: 'core',
-        service_time_ms: 10,
-        initial_instances: 3,
+        service_time_ms: 22,
+        initial_instances: 4,
         concurrency: 40,
-        queue_limit: 150,
+        queue_limit: 180,
+      });
+      entities.push({
+        id: 'lobby-balancer',
+        name: 'Lobby & Session Balancer',
+        role: 'Instance Allocation & Server Router',
+        tier: 'core',
+        service_time_ms: 16,
+        initial_instances: 3,
+        concurrency: 45,
+        queue_limit: 160,
       });
     }
-    if (!entities.some((e) => e.id.includes('match'))) {
+    if (!entities.some((e) => e.id.includes('cache') || e.id.includes('redis'))) {
+      entities.push({
+        id: 'player-cache',
+        name: 'Player Session Cache (Redis)',
+        role: 'Active Presence & Party Tokens',
+        tier: 'data',
+        service_time_ms: 3,
+        initial_instances: 2,
+        concurrency: 90,
+        queue_limit: 300,
+      });
+    }
+    if (!entities.some((e) => e.id.includes('db') || e.id.includes('leaderboard'))) {
+      entities.push({
+        id: 'match-db',
+        name: includeSpof ? 'Match & Leaderboard DB (SPOF)' : 'Distributed Match Records Store',
+        role: 'Persistent Rank & Profile Database',
+        tier: 'data',
+        service_time_ms: 15,
+        initial_instances: includeSpof ? 1 : 3,
+        concurrency: 40,
+        queue_limit: 220,
+      });
+    }
+    if (!entities.some((e) => e.tier === 'external')) {
+      entities.push({
+        id: 'anticheat-api',
+        name: 'Anti-Cheat & Physics Engine API',
+        role: 'External Real-Time Integrity Verifier',
+        tier: 'external',
+        service_time_ms: 110,
+        initial_instances: 2,
+        concurrency: 80,
+        queue_limit: 300,
+      });
+    }
+  } else if (domainKey === 'ridehailing') {
+    if (!hasUserCore) {
       entities.push({
         id: 'matching-engine',
         name: 'Geospatial Matching Engine',
@@ -697,8 +922,6 @@ export function synthesizeArchitectureFromPrompt(
         concurrency: 35,
         queue_limit: 200,
       });
-    }
-    if (!entities.some((e) => e.id.includes('trip') || e.id.includes('dispatch'))) {
       entities.push({
         id: 'trip-service',
         name: 'Trip Dispatcher Service',
@@ -720,18 +943,6 @@ export function synthesizeArchitectureFromPrompt(
         initial_instances: 2,
         concurrency: 80,
         queue_limit: 300,
-      });
-    }
-    if (!entities.some((e) => e.id.includes('driver') || e.id.includes('location'))) {
-      entities.push({
-        id: 'driver-location-db',
-        name: 'Driver Geospatial DB',
-        role: 'High-Frequency Spatial Store',
-        tier: 'data',
-        service_time_ms: 12,
-        initial_instances: 2,
-        concurrency: 60,
-        queue_limit: 250,
       });
     }
     if (!entities.some((e) => e.id.includes('db') || e.id.includes('rides'))) {
@@ -759,19 +970,7 @@ export function synthesizeArchitectureFromPrompt(
       });
     }
   } else if (domainKey === 'food_delivery') {
-    if (!entities.some((e) => e.id.includes('auth'))) {
-      entities.push({
-        id: 'auth-service',
-        name: 'Auth & Identity Filter',
-        role: 'JWT & Customer Token Verifier',
-        tier: 'core',
-        service_time_ms: 8,
-        initial_instances: 3,
-        concurrency: 40,
-        queue_limit: 150,
-      });
-    }
-    if (!entities.some((e) => e.id.includes('order'))) {
+    if (!hasUserCore) {
       entities.push({
         id: 'order-service',
         name: 'Kitchen Order Ingestion Service',
@@ -782,8 +981,6 @@ export function synthesizeArchitectureFromPrompt(
         concurrency: 40,
         queue_limit: 200,
       });
-    }
-    if (!entities.some((e) => e.id.includes('dispatch') || e.id.includes('courier'))) {
       entities.push({
         id: 'dispatch-optimizer',
         name: 'Live Courier Dispatcher',
@@ -795,7 +992,7 @@ export function synthesizeArchitectureFromPrompt(
         queue_limit: 160,
       });
     }
-    if (!entities.some((e) => e.id.includes('cache') || e.id.includes('menu'))) {
+    if (!entities.some((e) => e.id.includes('cache'))) {
       entities.push({
         id: 'menu-catalog-cache',
         name: 'Restaurant Menu Cache',
@@ -832,8 +1029,8 @@ export function synthesizeArchitectureFromPrompt(
       });
     }
   } else {
-    // For custom or other domains: ensure we have at least 1 core service, 1 data store, and 1 downstream external/dependency
-    if (!entities.some((e) => e.tier === 'core')) {
+    // Custom domain fallback
+    if (!hasUserCore) {
       entities.push({
         id: 'core-processing-service',
         name: 'Core Application Service',
@@ -881,7 +1078,7 @@ export function synthesizeArchitectureFromPrompt(
     }
   }
 
-  // 4. Construct Services Specification
+  // 5. Construct Services Specification
   const services = entities.map((e) => ({
     id: e.id,
     name: e.name,
@@ -916,7 +1113,7 @@ export function synthesizeArchitectureFromPrompt(
     zone_spread: ['a', 'b'],
   }));
 
-  // 5. Construct Intelligent DAG Edges
+  // 6. Construct Intelligent DAG Edges
   const entryNode = services.find((s) => s.entry) || services[0];
   const coreNodes = entities.filter((e) => e.tier === 'core');
   const dataNodes = entities.filter((e) => e.tier === 'data');
@@ -982,7 +1179,7 @@ export function synthesizeArchitectureFromPrompt(
     }
   }
 
-  // 6. Assemble Full Architecture Spec
+  // 7. Assemble Full Architecture Spec
   const spec: ArchitectureSpec = {
     name: archName,
     description: `Synthesized topology for "${prompt}". Calibrated for ${baseRps} RPS with ${services.length} microservices across 4 tiers.`,
@@ -1020,7 +1217,7 @@ export function synthesizeArchitectureFromPrompt(
     });
   }
 
-  // 7. Validate Spec with Core CascadeLab Zod Schema
+  // 8. Validate Spec with Core CascadeLab Zod Schema
   const validationResult = validateArchitecture(spec);
   if (!validationResult.success || !validationResult.data) {
     throw new Error(
@@ -1029,7 +1226,7 @@ export function synthesizeArchitectureFromPrompt(
   }
   const validatedSpec = validationResult.data;
 
-  // 8. Tiers Breakdown & Insights Summary
+  // 9. Tiers Breakdown & Insights Summary
   const tiers: SynthesizedServiceTier[] = [
     {
       tierName: 'Tier 1: Ingress Edge',
