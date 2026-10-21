@@ -97,6 +97,7 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
         setIsSynthesizing(false);
       } catch (err: any) {
         setError(err.message || 'Failed to synthesize architecture spec.');
+        setSynthesizedResult(null);
         setIsSynthesizing(false);
       }
     }, 400);

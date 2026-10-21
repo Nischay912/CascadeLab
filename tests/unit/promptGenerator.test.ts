@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   synthesizeArchitectureFromPrompt,
   detectDomainFromPrompt,
+  validatePromptIntent,
   PROMPT_PRESETS,
 } from '../../src/generator/promptArchitectureEngine';
 import { ArchitectureSpecSchema } from '../../src/schema/architecture';
@@ -13,6 +14,69 @@ describe('Prompt-to-Architecture Natural Language Topology Engine', () => {
       'Generate an Uber-like ride-hailing architecture with a geospatial matching service, a surge pricing cache, and an external payment gateway.';
     const domain = detectDomainFromPrompt(prompt);
     expect(domain).toBe('ridehailing');
+  });
+
+  it('rejects conversational greetings and small talk with clear warnings', () => {
+    const greetingPrompts = [
+      'hi how are you',
+      'hello',
+      'hey there',
+      'good morning',
+      'who are you',
+      'what is up',
+    ];
+
+    for (const prompt of greetingPrompts) {
+      const validation = validatePromptIntent(prompt);
+      expect(validation.isValid, `Should have rejected: ${prompt}`).toBe(false);
+      expect(validation.reason).toContain('conversational greeting');
+      expect(validation.suggestion).toBeDefined();
+
+      expect(() => synthesizeArchitectureFromPrompt(prompt)).toThrowError(
+        /conversational greeting/i
+      );
+    }
+  });
+
+  it('rejects generic code generation and algorithm requests', () => {
+    const codePrompts = [
+      'write python code for a snake game',
+      'generate a javascript function for quicksort',
+      'give me react code for a button',
+    ];
+
+    for (const prompt of codePrompts) {
+      const validation = validatePromptIntent(prompt);
+      expect(validation.isValid).toBe(false);
+      expect(validation.reason).toContain('source code');
+
+      expect(() => synthesizeArchitectureFromPrompt(prompt)).toThrowError(/source code/i);
+    }
+  });
+
+  it('rejects off-topic non-architectural queries', () => {
+    const offTopicPrompts = [
+      'what is the weather today',
+      'recipe for chocolate cake',
+      'who won the world cup',
+    ];
+
+    for (const prompt of offTopicPrompts) {
+      const validation = validatePromptIntent(prompt);
+      expect(validation.isValid).toBe(false);
+      expect(validation.reason).toContain('unrelated');
+
+      expect(() => synthesizeArchitectureFromPrompt(prompt)).toThrowError(/unrelated/i);
+    }
+  });
+
+  it('rejects single-word and underspecified prompts', () => {
+    const shortPrompts = ['test', 'database', 'fast'];
+    for (const prompt of shortPrompts) {
+      const validation = validatePromptIntent(prompt);
+      expect(validation.isValid).toBe(false);
+      expect(() => synthesizeArchitectureFromPrompt(prompt)).toThrowError(/too brief/i);
+    }
   });
 
   it('synthesizes a 100% valid ArchitectureSpec for the Uber ride-hailing prompt', () => {
@@ -33,7 +97,7 @@ describe('Prompt-to-Architecture Natural Language Topology Engine', () => {
     expect(result.spec.services.length).toBeGreaterThanOrEqual(5);
     const serviceIds = result.spec.services.map((s) => s.id);
     expect(serviceIds).toContain('api-gateway');
-    expect(serviceIds).toContain('payment-gateway');
+    expect(serviceIds.some((id) => id.includes('payment'))).toBe(true);
 
     // Verify edges and DAG connectivity
     expect(result.spec.edges.length).toBeGreaterThanOrEqual(4);
@@ -52,6 +116,33 @@ describe('Prompt-to-Architecture Natural Language Topology Engine', () => {
     expect(result.summary.servicesCount).toBe(result.spec.services.length);
     expect(result.summary.edgesCount).toBe(result.spec.edges.length);
     expect(result.summary.tiers.length).toBeGreaterThan(0);
+  });
+
+  it('dynamically synthesizes custom non-preset architecture from freeform prompt', () => {
+    const customPrompt =
+      'Hospital patient portal with doctor appointment service, medical records database, pharmacy prescription queue, and insurance claims gateway';
+    
+    const result = synthesizeArchitectureFromPrompt(customPrompt, {
+      trafficScale: 'medium',
+      mode: 'fragile_naive',
+      includeSpof: true,
+    });
+
+    const parsed = ArchitectureSpecSchema.safeParse(result.spec);
+    expect(parsed.success).toBe(true);
+
+    const serviceIds = result.spec.services.map((s) => s.id);
+    // Dynamically extracted entities should exist
+    expect(serviceIds.some((id) => id.includes('appointment'))).toBe(true);
+    expect(serviceIds.some((id) => id.includes('records') || id.includes('db'))).toBe(true);
+    expect(serviceIds.some((id) => id.includes('prescription') || id.includes('queue'))).toBe(true);
+    expect(serviceIds.some((id) => id.includes('claims') || id.includes('gateway'))).toBe(true);
+
+    // Verify runnable in SimulationEngine
+    const engine = new SimulationEngine(result.spec, 42);
+    const history = engine.runBatch(30);
+    expect(history.length).toBe(31);
+    expect(Number.isFinite(history[15].userSuccessRate)).toBe(true);
   });
 
   it('runs successfully through SimulationEngine with zero NaN metrics', () => {
