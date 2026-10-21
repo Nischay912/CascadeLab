@@ -150,6 +150,8 @@ const GraphCanvasInner: React.FC<{
         const queue = svcMetrics?.queue ?? 0;
         const successRate = svcMetrics?.successRate ?? 100;
 
+        const isTargetOfActiveFault = (currentMetrics?.activeFaultTargets || []).includes(node.id);
+
         let status: 'healthy' | 'degraded' | 'failing' | 'crashed' | 'recovering' = 'healthy';
         if (activeInstances === 0) {
           status = 'crashed';
@@ -160,6 +162,7 @@ const GraphCanvasInner: React.FC<{
           utilPct >= 80 ||
           queue > 15 ||
           successRate < 95 ||
+          isTargetOfActiveFault ||
           (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 35))
         ) {
           status = 'degraded';
@@ -168,7 +171,7 @@ const GraphCanvasInner: React.FC<{
         }
 
         const isOrigin =
-          originNodeId === node.id &&
+          (originNodeId === node.id || isTargetOfActiveFault) &&
           Boolean(currentMetrics?.activeFaults && currentMetrics.activeFaults.length > 0);
 
         const sparkline =

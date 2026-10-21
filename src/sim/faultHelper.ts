@@ -279,10 +279,50 @@ export function getArchitectureWorkloadProfiles(spec: ArchitectureSpec): Dynamic
   const desc = (spec.description || '').toLowerCase();
   const allText = `${name} ${desc}`;
 
-  const isGaming = /game|pubg|battle|match|player|anti-cheat|fps|mmo/i.test(allText);
-  const isStreaming = /stream|video|cdn|hls|drm|manifest|media/i.test(allText);
-  const isRides = /ride|driver|trip|cab|taxi|fleet|dispatch|commute/i.test(allText);
-  const isBanking = /bank|payment|upi|switch|fintech|transaction|settlement/i.test(allText);
+  // Strict word-boundary matching so words like 'common' do NOT trigger 'mmo'
+  const isEcommerce = /\b(shop|shopping|store|ecommerce|e-commerce|retail|cart|checkout|orders?|catalog)\b/i.test(allText);
+  const isGaming = /\b(game|games|gaming|pubg|battle|matchmaking|players?|anti-cheat|fps|mmo|esports)\b/i.test(allText);
+  const isStreaming = /\b(stream|streaming|video|cdn|hls|drm|manifest|media|vod|broadcast)\b/i.test(allText);
+  const isRides = /\b(ride|rides|driver|drivers|trip|trips|cab|cabs|taxi|fleet|dispatch|commute)\b/i.test(allText);
+  const isBanking = /\b(bank|banking|upi|switch|fintech|transactions?|settlement|ledger)\b/i.test(allText);
+
+  // If explicitly ecommerce (like ShopFast), return E-Commerce profiles
+  if (isEcommerce) {
+    return [
+      {
+        id: 'constant',
+        title: 'Constant Baseline',
+        desc: `${baseRps} RPS steady load`,
+        pattern: 'constant',
+        multiplier: 1.0,
+        calculatedRps: baseRps,
+      },
+      {
+        id: 'flash_sale',
+        title: 'Flash Sale Peak',
+        desc: `Surge from ${baseRps} to ${Math.round(baseRps * 3)} RPS (3x)`,
+        pattern: 'flash_sale',
+        multiplier: 3.0,
+        calculatedRps: Math.round(baseRps * 3),
+      },
+      {
+        id: 'ramp',
+        title: 'Gradual Ramp Up',
+        desc: `Linear climb 0 to ${Math.round(baseRps * 3.33)} RPS`,
+        pattern: 'ramp',
+        multiplier: 3.33,
+        calculatedRps: Math.round(baseRps * 3.33),
+      },
+      {
+        id: 'diurnal',
+        title: 'Diurnal Wave',
+        desc: `Day / night curve (${Math.round(baseRps * 0.6)} - ${Math.round(baseRps * 1.4)} RPS)`,
+        pattern: 'diurnal',
+        multiplier: 1.5,
+        calculatedRps: Math.round(baseRps * 1.4),
+      },
+    ];
+  }
 
   if (isGaming) {
     return [

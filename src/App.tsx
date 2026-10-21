@@ -48,7 +48,6 @@ export const App: React.FC = () => {
     deleteCustomArchitecture,
     setSpec,
     selectElement,
-    addFault,
     removeFaultByType,
     clearAllFaults,
     setWorkloadPattern,
@@ -139,23 +138,39 @@ export const App: React.FC = () => {
    */
   const handleInjectOrToggleFault = useCallback(
     (faultType: string, targetOverride?: string) => {
-      const existingFault = currentSpec.faults.find(
-        (f) => f.type === faultType && (!targetOverride || f.target === targetOverride)
-      );
-
       skipReinitRef.current = true;
+      const existingFault = currentSpec.faults.find((f) => f.type === faultType);
+
       let updatedSpec: ArchitectureSpec;
 
       if (existingFault) {
-        // Toggle OFF: Heal the fault
-        updatedSpec = removeFaultByType(faultType);
-        const targetName = getSmartTargetDisplayName(existingFault, currentSpec);
-        const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
-        showToast(`🛡️ Healed: Removed ${label} from [${targetName}]`, 'heal');
+        // If targetOverride is provided and differs from current target, retarget cleanly!
+        if (targetOverride && existingFault.target !== targetOverride) {
+          const updatedFaults = currentSpec.faults.map((f) =>
+            f.type === faultType ? { ...f, target: targetOverride } : f
+          );
+          updatedSpec = { ...currentSpec, faults: updatedFaults };
+          setSpec(updatedSpec);
+          const targetName =
+            updatedSpec.services.find((s) => s.id === targetOverride)?.name || targetOverride;
+          const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
+          showToast(`🎯 Retargeted: ${label} moved to [${targetName}]`, 'fault');
+        } else {
+          // Toggle OFF: Heal the fault
+          updatedSpec = removeFaultByType(faultType);
+          const targetName = getSmartTargetDisplayName(existingFault, currentSpec);
+          const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
+          showToast(`🛡️ Healed: Removed ${label} from [${targetName}]`, 'heal');
+        }
       } else {
         // Toggle ON: Inject new smart fault tailored to current topology (or custom target)
         const smartFault = resolveSmartFault(faultType, currentSpec, currentTime, targetOverride);
-        updatedSpec = addFault(smartFault);
+        const cleaned = currentSpec.faults.filter((f) => f.type !== faultType);
+        updatedSpec = {
+          ...currentSpec,
+          faults: [...cleaned, smartFault],
+        };
+        setSpec(updatedSpec);
         const targetName = getSmartTargetDisplayName(smartFault, updatedSpec);
         const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
         showToast(
@@ -167,7 +182,33 @@ export const App: React.FC = () => {
       // Re-run simulation batch immediately with forceCustom=true so preset scenario doesn't wipe it
       runSimulationBatch(updatedSpec, 180, seed, true);
     },
-    [currentSpec, currentTime, seed, removeFaultByType, addFault, runSimulationBatch, showToast]
+    [currentSpec, currentTime, seed, removeFaultByType, setSpec, runSimulationBatch, showToast]
+  );
+
+  /**
+   * Instantly retargets an active fault when user picks a different service in dropdown
+   */
+  const handleRetargetFault = useCallback(
+    (faultType: string, newTargetId: string) => {
+      const existingFault = currentSpec.faults.find((f) => f.type === faultType);
+      if (existingFault) {
+        skipReinitRef.current = true;
+        const updatedFaults = currentSpec.faults.map((f) =>
+          f.type === faultType ? { ...f, target: newTargetId } : f
+        );
+        const updatedSpec: ArchitectureSpec = {
+          ...currentSpec,
+          faults: updatedFaults,
+        };
+        setSpec(updatedSpec);
+        runSimulationBatch(updatedSpec, 180, seed, true);
+        const targetName =
+          updatedSpec.services.find((s) => s.id === newTargetId)?.name || newTargetId;
+        const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
+        showToast(`🎯 Retargeted: ${label} moved to [${targetName}]`, 'fault');
+      }
+    },
+    [currentSpec, seed, setSpec, runSimulationBatch, showToast]
   );
 
   /**
@@ -762,6 +803,7 @@ export const App: React.FC = () => {
             isCollapsed={isLeftRail}
             onToggleCollapse={() => setIsLeftPanelCollapsed((prev) => !prev)}
             onInjectFault={handleInjectOrToggleFault}
+            onRetargetFault={handleRetargetFault}
             onSetWorkload={handleSetWorkload}
             onUpdateBaseRps={handleUpdateBaseRps}
             onClearAllFaults={handleClearAllFaults}

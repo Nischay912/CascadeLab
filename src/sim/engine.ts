@@ -67,6 +67,7 @@ export interface SimulationTickMetrics {
   services: Record<string, ServiceSimulationState>;
   edges: Record<string, EdgeSimulationState>;
   activeFaults: string[];
+  activeFaultTargets?: string[];
   isMetastable: boolean;
   prolongedRecoverySeconds?: number;
 }
@@ -651,6 +652,7 @@ export class SimulationEngine {
       services: servicesRecord,
       edges: edgesRecord,
       activeFaults: activeFaults.map((f) => f.id || `${f.type}:${f.target}`),
+      activeFaultTargets: activeFaults.map((f) => f.target).filter((t): t is string => Boolean(t)),
       isMetastable,
       prolongedRecoverySeconds,
     };

@@ -116,36 +116,51 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
       const NODE_WIDTH = 260;
       const NODE_HEIGHT = 185;
 
-      // 1. Draw Expanding Failure Wave from Origin Node (ONLY when a fault is actively firing)
+      // 1. Draw Expanding Failure Wave from Origin Node(s) (ONLY when a fault is actively firing)
       const hasActiveFaults = Boolean(
         currentMetrics?.activeFaults && currentMetrics.activeFaults.length > 0
       );
-      if (originNodeId && hasActiveFaults) {
-        const originNode = nodeMap.get(originNodeId);
-        if (originNode) {
-          const originX = originNode.position.x + (originNode.measured?.width || NODE_WIDTH) / 2;
-          const originY = originNode.position.y + (originNode.measured?.height || NODE_HEIGHT) / 2;
 
-          waveRadiusRef.current = (waveRadiusRef.current + dt * 90) % 280;
-
-          // Render 3 expanding concentric rings
-          for (let i = 0; i < 3; i++) {
-            const ringR = (waveRadiusRef.current + i * 90) % 280;
-            const ringAlpha = Math.max(0, 1 - ringR / 280) * 0.65;
-
-            ctx.beginPath();
-            ctx.arc(originX, originY, ringR, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(248, 113, 113, ${ringAlpha})`;
-            ctx.lineWidth = 2.0 / zoom;
-            ctx.stroke();
+      const activeOriginTargets: string[] = [];
+      if (hasActiveFaults && currentMetrics?.activeFaultTargets) {
+        for (const target of currentMetrics.activeFaultTargets) {
+          if (target && target !== 'all' && !activeOriginTargets.includes(target)) {
+            activeOriginTargets.push(target);
           }
-
-          // Central beacon dot at origin
-          ctx.beginPath();
-          ctx.arc(originX, originY, 12, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(248, 113, 113, 0.4)';
-          ctx.fill();
         }
+      }
+      if (activeOriginTargets.length === 0 && originNodeId && hasActiveFaults && originNodeId !== 'all') {
+        activeOriginTargets.push(originNodeId);
+      }
+
+      if (activeOriginTargets.length > 0) {
+        waveRadiusRef.current = (waveRadiusRef.current + dt * 90) % 280;
+
+        activeOriginTargets.forEach((targetId) => {
+          const originNode = nodeMap.get(targetId);
+          if (originNode) {
+            const originX = originNode.position.x + (originNode.measured?.width || NODE_WIDTH) / 2;
+            const originY = originNode.position.y + (originNode.measured?.height || NODE_HEIGHT) / 2;
+
+            // Render 3 expanding concentric rings
+            for (let i = 0; i < 3; i++) {
+              const ringR = (waveRadiusRef.current + i * 90) % 280;
+              const ringAlpha = Math.max(0, 1 - ringR / 280) * 0.65;
+
+              ctx.beginPath();
+              ctx.arc(originX, originY, ringR, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(248, 113, 113, ${ringAlpha})`;
+              ctx.lineWidth = 2.0 / zoom;
+              ctx.stroke();
+            }
+
+            // Central beacon dot at origin
+            ctx.beginPath();
+            ctx.arc(originX, originY, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(248, 113, 113, 0.4)';
+            ctx.fill();
+          }
+        });
       }
 
       // 2. Animate and Batch Draw Flowing Particles on Edges

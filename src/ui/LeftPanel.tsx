@@ -26,6 +26,7 @@ import {
 
 interface LeftPanelProps {
   onInjectFault: (faultType: string, targetOverride?: string) => void;
+  onRetargetFault?: (faultType: string, newTargetId: string) => void;
   onSetWorkload: (workloadType: string) => void;
   onUpdateBaseRps?: (newBaseRps: number) => void;
   onClearAllFaults?: () => void;
@@ -37,6 +38,7 @@ interface LeftPanelProps {
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
   onInjectFault,
+  onRetargetFault,
   onSetWorkload,
   onUpdateBaseRps,
   onClearAllFaults,
@@ -201,15 +203,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   const Icon = FAULT_ICONS[fault.id] || AlertTriangle;
                   const iconColor = FAULT_COLORS[fault.id] || 'text-amber-400';
 
-                  const selectedTargetId = customTargets[fault.id] || fault.targetId;
+                  const activeFault = currentSpec.faults.find((f) => f.type === fault.id);
+                  const selectedTargetId =
+                    customTargets[fault.id] ||
+                    (activeFault && activeFault.target !== 'all' ? activeFault.target : fault.targetId);
+
                   const selectedTargetName =
                     selectedTargetId === 'all'
                       ? 'Zone B (Multi-Zone)'
                       : currentSpec.services.find((s) => s.id === selectedTargetId)?.name || fault.targetName;
 
-                  const activeFault = currentSpec.faults.find(
-                    (f) => f.type === fault.id && (f.target === selectedTargetId || selectedTargetId === 'all')
-                  );
                   const isConfigured = Boolean(activeFault);
                   const isFiringNow =
                     isConfigured &&
@@ -286,11 +289,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                           <select
                             value={selectedTargetId}
                             onChange={(e) => {
+                              const newTargetId = e.target.value;
                               setCustomTargets((prev) => ({
                                 ...prev,
-                                [fault.id]: e.target.value,
+                                [fault.id]: newTargetId,
                               }));
                               setTargetPickerOpen(null);
+                              onRetargetFault?.(fault.id, newTargetId);
                             }}
                             className="w-full bg-background border border-border text-[10px] text-text-primary rounded p-1 font-mono focus:outline-none focus:border-accent"
                           >
