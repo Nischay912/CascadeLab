@@ -18,10 +18,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useArchitectureStore } from '../state/useArchitectureStore';
+import { useSimulationStore } from '../state/useSimulationStore';
+import { getSmartTargetDisplayName } from '../sim/faultHelper';
 
 interface LeftPanelProps {
   onInjectFault: (faultType: string) => void;
   onSetWorkload: (workloadType: string) => void;
+  onClearAllFaults?: () => void;
   onOpenBreakIt: () => void;
   onOpenDefendIt: () => void;
   isCollapsed?: boolean;
@@ -31,6 +34,7 @@ interface LeftPanelProps {
 export const LeftPanel: React.FC<LeftPanelProps> = ({
   onInjectFault,
   onSetWorkload,
+  onClearAllFaults,
   onOpenBreakIt,
   onOpenDefendIt,
   isCollapsed = false,
@@ -46,6 +50,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     updateEdge,
     removeEdge,
   } = useArchitectureStore();
+  const { currentTime } = useSimulationStore();
 
   const selectedService =
     selectedElementType === 'service'
@@ -151,10 +156,21 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-semibold text-text-primary">
                 <span className="flex items-center gap-1.5">
-                  <Flame className="w-3.5 h-3.5 text-status-degraded" />
+                  <Flame className="w-3.5 h-3.5 text-status-degraded animate-pulse" />
                   <span>Fault Injection Deck</span>
                 </span>
-                <span className="text-[10px] text-text-dim">Trigger on click</span>
+                {currentSpec.faults.length > 0 ? (
+                  <button
+                    onClick={onClearAllFaults}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1 font-mono transition-colors"
+                    title="Heal all active faults across network"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                    Heal All ({currentSpec.faults.length})
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-text-dim">Instant Chaos</span>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
@@ -164,18 +180,58 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   { id: 'az_outage', label: 'Kill Zone B', icon: Server, color: 'text-red-400' },
                   { id: 'error', label: '30% Error Rate', icon: Zap, color: 'text-pink-400' },
                   { id: 'gray_failure', label: 'Gray Degradation', icon: AlertTriangle, color: 'text-yellow-300' },
-                ].map((fault) => (
-                  <button
-                    key={fault.id}
-                    onClick={() => onInjectFault(fault.id)}
-                    className="flex items-center gap-2 p-2 rounded bg-surface-raised hover:bg-surface-hover border border-border hover:border-border-accent text-left transition-all group"
-                  >
-                    <fault.icon className={`w-3.5 h-3.5 ${fault.color} flex-shrink-0 group-hover:scale-110 transition-transform`} />
-                    <span className="text-[11px] font-medium text-text-muted group-hover:text-text-primary truncate">
-                      {fault.label}
-                    </span>
-                  </button>
-                ))}
+                ].map((fault) => {
+                  const activeFault = currentSpec.faults.find((f) => f.type === fault.id);
+                  const isConfigured = Boolean(activeFault);
+                  const isFiringNow =
+                    isConfigured &&
+                    currentTime >= (activeFault?.start_s ?? 0) &&
+                    currentTime < (activeFault?.end_s ?? 180);
+                  const targetName = activeFault ? getSmartTargetDisplayName(activeFault, currentSpec) : '';
+
+                  return (
+                    <button
+                      key={fault.id}
+                      onClick={() => onInjectFault(fault.id)}
+                      title={
+                        isConfigured
+                          ? `Active on [${targetName}] (${activeFault?.start_s}s..${activeFault?.end_s}s) - Click to heal/remove`
+                          : `Click to inject ${fault.label} on this architecture`
+                      }
+                      className={`relative flex flex-col p-2 rounded text-left transition-all group overflow-hidden ${
+                        isFiringNow
+                          ? 'bg-rose-950/40 border-rose-500/80 text-rose-200 ring-1 ring-rose-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
+                          : isConfigured
+                          ? 'bg-amber-950/30 border-amber-500/60 text-amber-200'
+                          : 'bg-surface-raised hover:bg-surface-hover border-border hover:border-accent/40 text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 w-full">
+                        <fault.icon
+                          className={`w-3.5 h-3.5 ${
+                            isFiringNow ? 'text-rose-400 animate-bounce' : isConfigured ? 'text-amber-400' : fault.color
+                          } flex-shrink-0 group-hover:scale-110 transition-transform`}
+                        />
+                        <span className="text-[11px] font-medium truncate flex-1">
+                          {fault.label}
+                        </span>
+                        {isFiringNow && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping flex-shrink-0" />
+                        )}
+                      </div>
+
+                      {/* Sub-label showing target service and firing status */}
+                      {isConfigured && (
+                        <div className="flex items-center justify-between text-[9px] font-mono mt-1 pt-1 border-t border-border/40 w-full">
+                          <span className="truncate max-w-[90px] text-text-dim">{targetName}</span>
+                          <span className={isFiringNow ? 'text-rose-400 font-bold' : 'text-amber-400'}>
+                            {isFiringNow ? 'FIRING' : `@${activeFault?.start_s}s`}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -194,31 +250,36 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   { id: 'flash_sale', title: 'Flash Sale Peak', desc: 'Surge from 600 to 1800 RPS (3x)' },
                   { id: 'ramp', title: 'Gradual Ramp Up', desc: 'Linear climb 0 to 2000 RPS' },
                   { id: 'diurnal', title: 'Diurnal Wave', desc: 'Day / night traffic curve' },
-                ].map((wl) => (
-                  <button
-                    key={wl.id}
-                    onClick={() => onSetWorkload(wl.id)}
-                    className={`w-full p-2 rounded border text-left transition-colors flex items-center justify-between group ${
-                      currentSpec.workload.pattern === wl.id
-                        ? 'bg-accent/15 border-accent/40 text-accent'
-                        : 'bg-surface-raised hover:bg-surface-hover border-border hover:border-accent/40 text-text-primary'
-                    }`}
-                  >
-                    <div>
-                      <div className="text-xs font-medium group-hover:text-accent">
-                        {wl.title}
+                ].map((wl) => {
+                  const isActive = currentSpec.workload.pattern === wl.id;
+                  return (
+                    <button
+                      key={wl.id}
+                      onClick={() => onSetWorkload(wl.id)}
+                      className={`w-full p-2 rounded border text-left transition-all flex items-center justify-between group ${
+                        isActive
+                          ? 'bg-accent/20 border-accent text-accent shadow-sm ring-1 ring-accent/30'
+                          : 'bg-surface-raised hover:bg-surface-hover border-border hover:border-accent/40 text-text-primary'
+                      }`}
+                    >
+                      <div>
+                        <div className={`text-xs font-semibold ${isActive ? 'text-accent' : 'text-text-primary group-hover:text-accent'}`}>
+                          {wl.title}
+                        </div>
+                        <div className="text-[10px] text-text-dim">{wl.desc}</div>
                       </div>
-                      <div className="text-[10px] text-text-dim">{wl.desc}</div>
-                    </div>
-                    {currentSpec.workload.pattern === wl.id ? (
-                      <span className="text-[10px] font-bold text-accent">Active</span>
-                    ) : (
-                      <span className="text-[10px] text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                        Apply
-                      </span>
-                    )}
-                  </button>
-                ))}
+                      {isActive ? (
+                        <span className="text-[10px] font-bold text-accent px-1.5 py-0.5 rounded bg-accent/20 border border-accent/40">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">
+                          Apply
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

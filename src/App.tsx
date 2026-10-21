@@ -3,12 +3,18 @@ import { TopNav } from './ui/TopNav';
 import { LeftPanel } from './ui/LeftPanel';
 import { MainCanvas } from './ui/MainCanvas';
 import { RightPanel } from './ui/RightPanel';
-import { BottomTimeline } from './ui/BottomTimeline';
+import { BottomTimeline, EventMarker } from './ui/BottomTimeline';
 import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
 import { analyzeSimulationIncident } from './analysis';
 import { evaluateFastResilienceScore } from './optimizer/fastSuite';
+import {
+  resolveSmartFault,
+  getSmartTargetDisplayName,
+  FAULT_DEFINITIONS,
+} from './sim/faultHelper';
+import { ArchitectureSpec } from './schema/architecture';
 import {
   BreakItModal,
   BreakItInitialResult,
@@ -43,6 +49,8 @@ export const App: React.FC = () => {
     setSpec,
     selectElement,
     addFault,
+    removeFaultByType,
+    clearAllFaults,
     setWorkloadPattern,
   } = useArchitectureStore();
 
@@ -106,6 +114,116 @@ export const App: React.FC = () => {
     title: string;
     message: string;
   } | null>(null);
+
+  // Cybernetic Toast notification state
+  const [cyberToast, setCyberToast] = useState<{
+    message: string;
+    type: 'fault' | 'heal' | 'workload' | 'info';
+  } | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const showToast = useCallback(
+    (message: string, type: 'fault' | 'heal' | 'workload' | 'info' = 'info') => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      setCyberToast({ message, type });
+      toastTimeoutRef.current = setTimeout(() => {
+        setCyberToast(null);
+      }, 4000);
+    },
+    []
+  );
+
+  /**
+   * Intelligently injects or toggles off a fault across ANY architecture
+   * (ShopFast, PUBG, Video Streaming, or Gemini AI generated topologies).
+   */
+  const handleInjectOrToggleFault = useCallback(
+    (faultType: string) => {
+      const existingFault = currentSpec.faults.find((f) => f.type === faultType);
+
+      skipReinitRef.current = true;
+      let updatedSpec: ArchitectureSpec;
+
+      if (existingFault) {
+        // Toggle OFF: Heal the fault
+        updatedSpec = removeFaultByType(faultType);
+        const targetName = getSmartTargetDisplayName(existingFault, currentSpec);
+        const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
+        showToast(`🛡️ Healed: Removed ${label} from [${targetName}]`, 'heal');
+      } else {
+        // Toggle ON: Inject new smart fault tailored to current topology
+        const smartFault = resolveSmartFault(faultType, currentSpec, currentTime);
+        updatedSpec = addFault(smartFault);
+        const targetName = getSmartTargetDisplayName(smartFault, updatedSpec);
+        const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
+        showToast(
+          `🔥 Injected: ${label} on [${targetName}] (t=${smartFault.start_s}s..${smartFault.end_s}s)`,
+          'fault'
+        );
+      }
+
+      // Re-run simulation batch immediately with forceCustom=true so preset scenario doesn't wipe it
+      runSimulationBatch(updatedSpec, 180, seed, true);
+    },
+    [currentSpec, currentTime, seed, removeFaultByType, addFault, runSimulationBatch, showToast]
+  );
+
+  /**
+   * Switches offered workload pattern (Constant, Flash Sale, Ramp, Diurnal)
+   */
+  const handleSetWorkload = useCallback(
+    (workloadPattern: string) => {
+      skipReinitRef.current = true;
+      const updatedSpec = setWorkloadPattern(workloadPattern);
+      runSimulationBatch(updatedSpec, 180, seed, true);
+      const targetRps = Math.round(
+        updatedSpec.workload.base_rps * (updatedSpec.workload.multiplier || 1.0)
+      );
+      showToast(
+        `📈 Workload profile switched to "${workloadPattern.replace('_', ' ').toUpperCase()}" (${targetRps} RPS)`,
+        'workload'
+      );
+    },
+    [setWorkloadPattern, seed, runSimulationBatch, showToast]
+  );
+
+  /**
+   * Heals all active faults across the entire architecture
+   */
+  const handleClearAllFaults = useCallback(() => {
+    skipReinitRef.current = true;
+    const updatedSpec = clearAllFaults();
+    runSimulationBatch(updatedSpec, 180, seed, true);
+    showToast('🛡️ All active faults cleared. Entire network restored to 100% nominal.', 'heal');
+  }, [clearAllFaults, seed, runSimulationBatch, showToast]);
+
+  /**
+   * Dynamic event markers for bottom timeline scrubber
+   */
+  const timelineMarkers: EventMarker[] = useMemo(() => {
+    if (!currentSpec.faults || currentSpec.faults.length === 0) {
+      return [
+        { time: 60, label: 'Chaos Window (Nominal)', type: 'fault' },
+        { time: 120, label: 'Recovery Window (Nominal)', type: 'recovery' },
+      ];
+    }
+    const markers: EventMarker[] = [];
+    currentSpec.faults.forEach((fault) => {
+      const targetName = getSmartTargetDisplayName(fault, currentSpec);
+      const label = FAULT_DEFINITIONS[fault.type]?.label || fault.type;
+      markers.push({
+        time: fault.start_s,
+        label: `${label} @ [${targetName}]`,
+        type: 'fault',
+      });
+      markers.push({
+        time: fault.end_s,
+        label: `Heal: ${label} ended`,
+        type: 'recovery',
+      });
+    });
+    return markers.sort((a, b) => a.time - b.time);
+  }, [currentSpec]);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -522,31 +640,41 @@ export const App: React.FC = () => {
             value_per_request_inr: val,
           });
         }}
-        onInjectFault={(f) => {
-          let target = 'payment-provider';
-          let factor = 5;
-          let type = f;
-          if (f === 'kill_instances') {
-            target = 'auth';
-          } else if (f === 'kill_100') {
-            target = 'orders-db';
-            type = 'kill_instances';
-          } else if (f === 'cache_flush') {
-            target = 'cache';
-          } else if (f === 'az_outage') {
-            target = 'all';
-          }
-          addFault({
-            type: type as any,
-            target,
-            start_s: currentTime || 60,
-            end_s: (currentTime || 60) + 60,
-            factor,
-            percentage: f === 'kill_100' ? 100 : 50,
-          });
-          runSimulationBatch(currentSpec, 180, seed);
-        }}
+        onInjectFault={handleInjectOrToggleFault}
       />
+
+      {/* Cybernetic Toast Notification */}
+      {cyberToast && (
+        <div
+          data-testid="cyber-toast"
+          className="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 animate-in fade-in slide-in-from-top-2"
+        >
+          <div
+            className={`px-4 py-2 rounded-lg border text-xs font-semibold shadow-2xl flex items-center gap-2.5 backdrop-blur-md ${
+              cyberToast.type === 'fault'
+                ? 'bg-rose-950/90 border-rose-500/60 text-rose-200 shadow-rose-900/30 ring-1 ring-rose-500/30'
+                : cyberToast.type === 'heal'
+                ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-200 shadow-emerald-900/30 ring-1 ring-emerald-500/30'
+                : cyberToast.type === 'workload'
+                ? 'bg-cyan-950/90 border-cyan-500/60 text-cyan-200 shadow-cyan-900/30 ring-1 ring-cyan-500/30'
+                : 'bg-surface-raised/90 border-accent/50 text-text-primary shadow-noc'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full animate-ping flex-shrink-0 ${
+                cyberToast.type === 'fault'
+                  ? 'bg-rose-400'
+                  : cyberToast.type === 'heal'
+                  ? 'bg-emerald-400'
+                  : cyberToast.type === 'workload'
+                  ? 'bg-cyan-400'
+                  : 'bg-accent'
+              }`}
+            />
+            <span className="font-mono text-[11px] tracking-wide">{cyberToast.message}</span>
+          </div>
+        </div>
+      )}
 
       {/* Presenter Mode KPI Banner (Priority A7) */}
       {isPresenterMode && (
@@ -611,22 +739,9 @@ export const App: React.FC = () => {
           <LeftPanel
             isCollapsed={isLeftRail}
             onToggleCollapse={() => setIsLeftPanelCollapsed((prev) => !prev)}
-            onInjectFault={(f) => {
-              addFault({
-                type: f as any,
-                target:
-                  currentSpec.services[currentSpec.services.length - 1]?.id ||
-                  'payment-provider',
-                start_s: 60,
-                end_s: 120,
-                factor: 5,
-              });
-              runSimulationBatch(currentSpec, 180, seed);
-            }}
-            onSetWorkload={(w) => {
-              setWorkloadPattern(w);
-              runSimulationBatch(currentSpec, 180, seed);
-            }}
+            onInjectFault={handleInjectOrToggleFault}
+            onSetWorkload={handleSetWorkload}
+            onClearAllFaults={handleClearAllFaults}
             onOpenBreakIt={() => setIsBreakItOpen(true)}
             onOpenDefendIt={() => setIsDefendItOpen(true)}
           />
@@ -728,6 +843,7 @@ export const App: React.FC = () => {
         onChangeSpeed={setSpeed}
         currentMetrics={currentMetrics}
         history={history}
+        markers={timelineMarkers}
       />
 
       {/* Live Arcade Battle / Incident Commander HUD */}

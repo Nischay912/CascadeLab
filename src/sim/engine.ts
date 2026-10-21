@@ -156,6 +156,8 @@ export class SimulationEngine {
 
     const offeredEntryRps = getOfferedWorkloadRps(this.spec.workload, t);
 
+    const killedByFaultMap = new Map<string, number>();
+
     // 1. Process Circuit Breakers and Zone Failures
     for (const edge of this.spec.edges) {
       const edgeId = edge.id || `${edge.from}->${edge.to}`;
@@ -433,9 +435,10 @@ export class SimulationEngine {
         }
       }
 
-      // Zone outage check
+      // Zone outage check (default to multi-zone ['a', 'b'] if not explicitly set)
       let activeReplicas = svcState.baseInstances;
-      if (svc.zone_spread.some((z) => downZones.has(z))) {
+      const zoneSpread = svc.zone_spread && svc.zone_spread.length > 0 ? svc.zone_spread : ['a', 'b'];
+      if (zoneSpread.some((z) => downZones.has(z))) {
         activeReplicas = Math.max(1, Math.floor(activeReplicas / 2));
       }
 
@@ -457,11 +460,14 @@ export class SimulationEngine {
         }
       }
 
+      const killedByFault = Math.max(0, svcState.baseInstances - activeReplicas);
+      killedByFaultMap.set(svc.id, killedByFault);
       const readyInstances = Math.max(0, activeReplicas - svcState.instancesCrashed);
       svcState.instancesReady = readyInstances;
+      const displayCrashed = svcState.instancesCrashed + killedByFault;
 
       totalActiveInstances += readyInstances;
-      totalCrashedInstances += svcState.instancesCrashed;
+      totalCrashedInstances += displayCrashed;
 
       // Concurrency & Service Capacity (requests / sec)
       const totalWorkers = readyInstances * svc.concurrency;
@@ -538,7 +544,8 @@ export class SimulationEngine {
         }
       }
 
-      const ownSuccessRate = arrivalRps > 0 ? (1.0 - rejectedRps / arrivalRps) : 1.0;
+      const uninhibitedOwnSuccess = arrivalRps > 0 ? (1.0 - rejectedRps / arrivalRps) : 1.0;
+      const ownSuccessRate = Math.max(0, uninhibitedOwnSuccess * (1.0 - svcMod.injectedErrorRate));
       svcState.successRate = Math.max(0, Math.min(100, ownSuccessRate * criticalDownstreamSuccess * 100));
 
       // Overload Crash Loop Mechanics
@@ -612,7 +619,11 @@ export class SimulationEngine {
     // Snapshot records for caller
     const servicesRecord: Record<string, ServiceSimulationState> = {};
     for (const [id, state] of this.serviceStates.entries()) {
-      servicesRecord[id] = { ...state };
+      const faultKilled = killedByFaultMap.get(id) || 0;
+      servicesRecord[id] = {
+        ...state,
+        instancesCrashed: state.instancesCrashed + faultKilled,
+      };
     }
 
     const edgesRecord: Record<string, EdgeSimulationState> = {};

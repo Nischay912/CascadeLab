@@ -25,7 +25,7 @@ interface SimulationState {
 
   // Actions
   initializeSimulation: (spec: ArchitectureSpec, seed?: number) => void;
-  runSimulationBatch: (spec: ArchitectureSpec, durationSeconds?: number, seed?: number) => void;
+  runSimulationBatch: (spec: ArchitectureSpec, durationSeconds?: number, seed?: number, forceCustom?: boolean) => void;
   startLiveBattle: (spec: ArchitectureSpec, durationSeconds?: number, speed?: number) => void;
   setCurrentTime: (t: number) => void;
   setSpeed: (speed: number) => void;
@@ -181,9 +181,15 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     });
   },
 
-  runSimulationBatch: (spec: ArchitectureSpec, durationSeconds = 180, seed = 42) => {
+  runSimulationBatch: (
+    spec: ArchitectureSpec,
+    durationSeconds = 180,
+    seed = 42,
+    forceCustom = false
+  ) => {
     const { selectedScenario, currentTime } = get();
-    const effectiveSpec = applyScenarioToSpec(spec, selectedScenario);
+    const effectiveScenario: ScenarioType = forceCustom ? 'custom' : selectedScenario;
+    const effectiveSpec = applyScenarioToSpec(spec, effectiveScenario);
     const engine = new SimulationEngine(effectiveSpec, seed);
     const history = engine.runBatch(durationSeconds);
     const safeTime = Math.min(currentTime, history.length - 1);
@@ -192,6 +198,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const originNodeId = firstFault ? (firstFault.target === 'all' ? null : firstFault.target) : null;
 
     set({
+      selectedScenario: effectiveScenario,
       history,
       currentMetrics: history[safeTime] || history[0],
       maxTime: durationSeconds,

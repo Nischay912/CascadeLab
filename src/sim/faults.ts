@@ -123,6 +123,10 @@ export function evaluateActiveFaults(
             cacheHitMultiplier: recoveryProgress,
           });
         }
+        // Also apply a cold-cache stampede latency surge directly to the target service
+        // (recovers from 5x down to 1x baseline over warm_time_s) so all architectures react visibly!
+        const mod = getServiceMod(fault.target);
+        mod.latencyMultiplier *= 1.0 + (1.0 - recoveryProgress) * 4.0;
         break;
       }
     }

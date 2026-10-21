@@ -167,6 +167,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             <option value="az_outage">Zone B Availability Outage</option>
             <option value="cache_flush">Redis Cache Wipe (Herd)</option>
             <option value="gray_failure">Silent Gray Failure</option>
+            <option value="custom">⚡ Custom Chaos (Active)</option>
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-text-muted absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>

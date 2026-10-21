@@ -81,9 +81,11 @@ interface ArchitectureState {
   removeService: (serviceId: string) => void;
   updateEdge: (edgeId: string, updates: Partial<EdgeSpec>) => void;
   removeEdge: (edgeId: string) => void;
-  addFault: (fault: FaultSpec) => void;
+  addFault: (fault: FaultSpec) => ArchitectureSpec;
   removeFault: (faultId: string) => void;
-  setWorkloadPattern: (pattern: any) => void;
+  removeFaultByType: (faultType: string) => ArchitectureSpec;
+  clearAllFaults: () => ArchitectureSpec;
+  setWorkloadPattern: (pattern: any) => ArchitectureSpec;
 }
 
 // Check if a scenario is encoded in URL hash or stored in localStorage
@@ -408,13 +410,18 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
 
   addFault: (fault) => {
     const { currentSpec, customArchitectures, activeTemplateKey } = get();
+    // Replace if same type & target already exists, else append
+    const filtered = currentSpec.faults.filter(
+      (f) => !(f.type === fault.type && f.target === fault.target)
+    );
     const updatedSpec: ArchitectureSpec = {
       ...currentSpec,
-      faults: [...currentSpec.faults, fault],
+      faults: [...filtered, fault],
     };
     syncHashToUrl(updatedSpec);
     const updatedCustom = syncUpdatedSpecToCustomList(customArchitectures, activeTemplateKey, updatedSpec);
     set({ currentSpec: updatedSpec, customArchitectures: updatedCustom });
+    return updatedSpec;
   },
 
   removeFault: (faultId) => {
@@ -428,18 +435,54 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     set({ currentSpec: updatedSpec, customArchitectures: updatedCustom });
   },
 
+  removeFaultByType: (faultType) => {
+    const { currentSpec, customArchitectures, activeTemplateKey } = get();
+    const updatedSpec: ArchitectureSpec = {
+      ...currentSpec,
+      faults: currentSpec.faults.filter((f) => f.type !== faultType),
+    };
+    syncHashToUrl(updatedSpec);
+    const updatedCustom = syncUpdatedSpecToCustomList(customArchitectures, activeTemplateKey, updatedSpec);
+    set({ currentSpec: updatedSpec, customArchitectures: updatedCustom });
+    return updatedSpec;
+  },
+
+  clearAllFaults: () => {
+    const { currentSpec, customArchitectures, activeTemplateKey } = get();
+    const updatedSpec: ArchitectureSpec = {
+      ...currentSpec,
+      faults: [],
+    };
+    syncHashToUrl(updatedSpec);
+    const updatedCustom = syncUpdatedSpecToCustomList(customArchitectures, activeTemplateKey, updatedSpec);
+    set({ currentSpec: updatedSpec, customArchitectures: updatedCustom });
+    return updatedSpec;
+  },
+
   setWorkloadPattern: (pattern) => {
     const { currentSpec, customArchitectures, activeTemplateKey } = get();
+    const multiplier =
+      pattern === 'constant'
+        ? 1.0
+        : pattern === 'flash_sale'
+        ? 3.0
+        : pattern === 'ramp'
+        ? 3.33
+        : pattern === 'diurnal'
+        ? 1.5
+        : currentSpec.workload.multiplier;
+
     const updatedSpec: ArchitectureSpec = {
       ...currentSpec,
       workload: {
         ...currentSpec.workload,
         pattern,
-        multiplier: pattern === 'constant' ? 1.0 : pattern === 'flash_sale' ? 3.0 : currentSpec.workload.multiplier,
+        multiplier,
       },
     };
     syncHashToUrl(updatedSpec);
     const updatedCustom = syncUpdatedSpecToCustomList(customArchitectures, activeTemplateKey, updatedSpec);
     set({ currentSpec: updatedSpec, customArchitectures: updatedCustom });
+    return updatedSpec;
   },
 }));
