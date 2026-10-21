@@ -153,9 +153,10 @@ const GraphCanvasInner: React.FC<{
         let status: 'healthy' | 'degraded' | 'failing' | 'crashed' | 'recovering' = 'healthy';
         if (activeInstances === 0) {
           status = 'crashed';
-        } else if (crashedInstances > 0 || queue > 40 || utilPct >= 95 || successRate < 70) {
+        } else if (queue > 40 || utilPct >= 95 || successRate < 70) {
           status = 'failing';
         } else if (
+          crashedInstances > 0 ||
           utilPct >= 80 ||
           queue > 15 ||
           successRate < 95 ||

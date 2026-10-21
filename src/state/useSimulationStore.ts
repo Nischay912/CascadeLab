@@ -132,7 +132,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   isRunning: false,
   speed: 1,
   seed: 42,
-  selectedScenario: 'provider_latency',
+  selectedScenario: 'baseline',
   history: [],
   currentMetrics: null,
   originNodeId: null,
@@ -140,16 +140,26 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   initializeSimulation: (spec: ArchitectureSpec, seed = 42) => {
     const { selectedScenario } = get();
-    const effectiveSpec = applyScenarioToSpec(spec, selectedScenario);
+    // If the spec has its own custom faults or non-constant workload (e.g. from URL hash or user injection),
+    // preserve them under 'custom' scenario so presets do not wipe them on reload!
+    const hasCustomFaultsOrWorkload =
+      (spec.faults && spec.faults.length > 0) ||
+      (spec.workload && spec.workload.pattern !== 'constant');
+
+    const effectiveScenario: ScenarioType =
+      selectedScenario === 'custom' || hasCustomFaultsOrWorkload ? 'custom' : selectedScenario;
+
+    const effectiveSpec = applyScenarioToSpec(spec, effectiveScenario);
     const engine = new SimulationEngine(effectiveSpec, seed);
     const history = engine.runBatch(180);
     const initialMetrics = history[0] || null;
 
-    // Detect origin node
+    // Detect origin node from active or first fault
     const firstFault = effectiveSpec.faults[0];
     const originNodeId = firstFault ? (firstFault.target === 'all' ? null : firstFault.target) : null;
 
     set({
+      selectedScenario: effectiveScenario,
       history,
       currentMetrics: initialMetrics,
       currentTime: 0,

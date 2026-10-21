@@ -116,8 +116,11 @@ export const ParticleCanvas: React.FC<ParticleCanvasProps> = ({
       const NODE_WIDTH = 260;
       const NODE_HEIGHT = 185;
 
-      // 1. Draw Expanding Failure Wave from Origin Node
-      if (originNodeId) {
+      // 1. Draw Expanding Failure Wave from Origin Node (ONLY when a fault is actively firing)
+      const hasActiveFaults = Boolean(
+        currentMetrics?.activeFaults && currentMetrics.activeFaults.length > 0
+      );
+      if (originNodeId && hasActiveFaults) {
         const originNode = nodeMap.get(originNodeId);
         if (originNode) {
           const originX = originNode.position.x + (originNode.measured?.width || NODE_WIDTH) / 2;

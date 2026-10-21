@@ -138,8 +138,10 @@ export const App: React.FC = () => {
    * (ShopFast, PUBG, Video Streaming, or Gemini AI generated topologies).
    */
   const handleInjectOrToggleFault = useCallback(
-    (faultType: string) => {
-      const existingFault = currentSpec.faults.find((f) => f.type === faultType);
+    (faultType: string, targetOverride?: string) => {
+      const existingFault = currentSpec.faults.find(
+        (f) => f.type === faultType && (!targetOverride || f.target === targetOverride)
+      );
 
       skipReinitRef.current = true;
       let updatedSpec: ArchitectureSpec;
@@ -151,8 +153,8 @@ export const App: React.FC = () => {
         const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
         showToast(`🛡️ Healed: Removed ${label} from [${targetName}]`, 'heal');
       } else {
-        // Toggle ON: Inject new smart fault tailored to current topology
-        const smartFault = resolveSmartFault(faultType, currentSpec, currentTime);
+        // Toggle ON: Inject new smart fault tailored to current topology (or custom target)
+        const smartFault = resolveSmartFault(faultType, currentSpec, currentTime, targetOverride);
         updatedSpec = addFault(smartFault);
         const targetName = getSmartTargetDisplayName(smartFault, updatedSpec);
         const label = FAULT_DEFINITIONS[faultType]?.label || faultType;
@@ -185,6 +187,26 @@ export const App: React.FC = () => {
       );
     },
     [setWorkloadPattern, seed, runSimulationBatch, showToast]
+  );
+
+  /**
+   * Dynamically tunes baseline ingress RPS for the current architecture
+   */
+  const handleUpdateBaseRps = useCallback(
+    (newBaseRps: number) => {
+      skipReinitRef.current = true;
+      const updatedSpec: ArchitectureSpec = {
+        ...currentSpec,
+        workload: {
+          ...currentSpec.workload,
+          base_rps: newBaseRps,
+        },
+      };
+      setSpec(updatedSpec);
+      runSimulationBatch(updatedSpec, 180, seed, true);
+      showToast(`📈 Ingress base load tuned to ${newBaseRps} RPS`, 'workload');
+    },
+    [currentSpec, setSpec, seed, runSimulationBatch, showToast]
   );
 
   /**
@@ -741,6 +763,7 @@ export const App: React.FC = () => {
             onToggleCollapse={() => setIsLeftPanelCollapsed((prev) => !prev)}
             onInjectFault={handleInjectOrToggleFault}
             onSetWorkload={handleSetWorkload}
+            onUpdateBaseRps={handleUpdateBaseRps}
             onClearAllFaults={handleClearAllFaults}
             onOpenBreakIt={() => setIsBreakItOpen(true)}
             onOpenDefendIt={() => setIsDefendItOpen(true)}

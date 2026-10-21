@@ -392,20 +392,11 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
     entry: 'gateway',
     pattern: 'flash_sale',
     base_rps: 600,
-    multiplier: 3.0,
+    multiplier: 1.0,
     duration_s: 180,
     ramp_time_s: 30,
   },
-  faults: [
-    {
-      id: 'f_latency_provider',
-      type: 'latency',
-      target: 'payment-provider',
-      factor: 5.0,
-      start_s: 60,
-      end_s: 120,
-    },
-  ],
+  faults: [],
   seed: 42,
 };
 

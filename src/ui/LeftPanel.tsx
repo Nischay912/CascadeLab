@@ -19,11 +19,15 @@ import {
 } from 'lucide-react';
 import { useArchitectureStore } from '../state/useArchitectureStore';
 import { useSimulationStore } from '../state/useSimulationStore';
-import { getSmartTargetDisplayName } from '../sim/faultHelper';
+import {
+  getArchitectureFaultDeck,
+  getArchitectureWorkloadProfiles,
+} from '../sim/faultHelper';
 
 interface LeftPanelProps {
-  onInjectFault: (faultType: string) => void;
+  onInjectFault: (faultType: string, targetOverride?: string) => void;
   onSetWorkload: (workloadType: string) => void;
+  onUpdateBaseRps?: (newBaseRps: number) => void;
   onClearAllFaults?: () => void;
   onOpenBreakIt: () => void;
   onOpenDefendIt: () => void;
@@ -34,6 +38,7 @@ interface LeftPanelProps {
 export const LeftPanel: React.FC<LeftPanelProps> = ({
   onInjectFault,
   onSetWorkload,
+  onUpdateBaseRps,
   onClearAllFaults,
   onOpenBreakIt,
   onOpenDefendIt,
@@ -41,6 +46,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onToggleCollapse,
 }) => {
   const [activeTab, setActiveTab] = useState<'library' | 'inspector'>('library');
+  const [targetPickerOpen, setTargetPickerOpen] = useState<string | null>(null);
+  const [customTargets, setCustomTargets] = useState<Record<string, string>>({});
   const {
     currentSpec,
     selectedElementId,
@@ -173,32 +180,48 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 )}
               </div>
               <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { id: 'latency', label: 'Provider Lag 5x', icon: Clock, color: 'text-amber-400' },
-                  { id: 'kill_instances', label: 'Kill 50% Nodes', icon: AlertTriangle, color: 'text-rose-400' },
-                  { id: 'cache_flush', label: 'Wipe Redis Cache', icon: Shuffle, color: 'text-orange-400' },
-                  { id: 'az_outage', label: 'Kill Zone B', icon: Server, color: 'text-red-400' },
-                  { id: 'error', label: '30% Error Rate', icon: Zap, color: 'text-pink-400' },
-                  { id: 'gray_failure', label: 'Gray Degradation', icon: AlertTriangle, color: 'text-yellow-300' },
-                ].map((fault) => {
-                  const activeFault = currentSpec.faults.find((f) => f.type === fault.id);
+                {getArchitectureFaultDeck(currentSpec).map((fault) => {
+                  const FAULT_ICONS: Record<string, any> = {
+                    latency: Clock,
+                    kill_instances: AlertTriangle,
+                    cache_flush: Shuffle,
+                    az_outage: Server,
+                    error: Zap,
+                    gray_failure: AlertTriangle,
+                  };
+                  const FAULT_COLORS: Record<string, string> = {
+                    latency: 'text-amber-400',
+                    kill_instances: 'text-rose-400',
+                    cache_flush: 'text-orange-400',
+                    az_outage: 'text-red-400',
+                    error: 'text-pink-400',
+                    gray_failure: 'text-yellow-300',
+                  };
+
+                  const Icon = FAULT_ICONS[fault.id] || AlertTriangle;
+                  const iconColor = FAULT_COLORS[fault.id] || 'text-amber-400';
+
+                  const selectedTargetId = customTargets[fault.id] || fault.targetId;
+                  const selectedTargetName =
+                    selectedTargetId === 'all'
+                      ? 'Zone B (Multi-Zone)'
+                      : currentSpec.services.find((s) => s.id === selectedTargetId)?.name || fault.targetName;
+
+                  const activeFault = currentSpec.faults.find(
+                    (f) => f.type === fault.id && (f.target === selectedTargetId || selectedTargetId === 'all')
+                  );
                   const isConfigured = Boolean(activeFault);
                   const isFiringNow =
                     isConfigured &&
                     currentTime >= (activeFault?.start_s ?? 0) &&
                     currentTime < (activeFault?.end_s ?? 180);
-                  const targetName = activeFault ? getSmartTargetDisplayName(activeFault, currentSpec) : '';
+
+                  const isPickerOpen = targetPickerOpen === fault.id;
 
                   return (
-                    <button
+                    <div
                       key={fault.id}
-                      onClick={() => onInjectFault(fault.id)}
-                      title={
-                        isConfigured
-                          ? `Active on [${targetName}] (${activeFault?.start_s}s..${activeFault?.end_s}s) - Click to heal/remove`
-                          : `Click to inject ${fault.label} on this architecture`
-                      }
-                      className={`relative flex flex-col p-2 rounded text-left transition-all group overflow-hidden ${
+                      className={`relative flex flex-col p-2 rounded text-left transition-all group overflow-hidden border ${
                         isFiringNow
                           ? 'bg-rose-950/40 border-rose-500/80 text-rose-200 ring-1 ring-rose-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
                           : isConfigured
@@ -206,30 +229,80 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                           : 'bg-surface-raised hover:bg-surface-hover border-border hover:border-accent/40 text-text-muted hover:text-text-primary'
                       }`}
                     >
-                      <div className="flex items-center gap-1.5 w-full">
-                        <fault.icon
-                          className={`w-3.5 h-3.5 ${
-                            isFiringNow ? 'text-rose-400 animate-bounce' : isConfigured ? 'text-amber-400' : fault.color
-                          } flex-shrink-0 group-hover:scale-110 transition-transform`}
-                        />
-                        <span className="text-[11px] font-medium truncate flex-1">
-                          {fault.label}
-                        </span>
-                        {isFiringNow && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping flex-shrink-0" />
-                        )}
-                      </div>
+                      <button
+                        onClick={() => onInjectFault(fault.id, selectedTargetId)}
+                        title={
+                          isConfigured
+                            ? `Active on [${selectedTargetName}] (${activeFault?.start_s}s..${activeFault?.end_s}s) - Click to heal/remove`
+                            : `Click to inject ${fault.label} on [${selectedTargetName}]`
+                        }
+                        className="w-full text-left flex flex-col focus:outline-none"
+                      >
+                        <div className="flex items-center gap-1.5 w-full">
+                          <Icon
+                            className={`w-3.5 h-3.5 ${
+                              isFiringNow ? 'text-rose-400 animate-bounce' : isConfigured ? 'text-amber-400' : iconColor
+                            } flex-shrink-0 group-hover:scale-110 transition-transform`}
+                          />
+                          <span className="text-[11px] font-medium truncate flex-1 leading-tight">
+                            {fault.label}
+                          </span>
+                          {isFiringNow && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping flex-shrink-0" />
+                          )}
+                        </div>
 
-                      {/* Sub-label showing target service and firing status */}
-                      {isConfigured && (
+                        {/* Target name and state */}
                         <div className="flex items-center justify-between text-[9px] font-mono mt-1 pt-1 border-t border-border/40 w-full">
-                          <span className="truncate max-w-[90px] text-text-dim">{targetName}</span>
-                          <span className={isFiringNow ? 'text-rose-400 font-bold' : 'text-amber-400'}>
-                            {isFiringNow ? 'FIRING' : `@${activeFault?.start_s}s`}
+                          <span className="truncate max-w-[90px] text-text-dim" title={`Target: ${selectedTargetName}`}>
+                            {selectedTargetName}
+                          </span>
+                          <span className={isFiringNow ? 'text-rose-400 font-bold' : isConfigured ? 'text-amber-400' : 'text-text-dim'}>
+                            {isFiringNow ? 'FIRING' : isConfigured ? `@${activeFault?.start_s}s` : 'Ready'}
                           </span>
                         </div>
+                      </button>
+
+                      {/* Target selector trigger for single-target faults */}
+                      {fault.id !== 'az_outage' && (
+                        <div className="mt-1 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTargetPickerOpen(isPickerOpen ? null : fault.id);
+                            }}
+                            className="text-[9px] text-accent/70 hover:text-accent font-mono hover:underline"
+                            title="Pick a specific target service"
+                          >
+                            {isPickerOpen ? 'Done' : 'Change Target'}
+                          </button>
+                        </div>
                       )}
-                    </button>
+
+                      {/* Inline Target Selector Dropdown */}
+                      {isPickerOpen && (
+                        <div className="mt-1.5 pt-1.5 border-t border-border/60">
+                          <select
+                            value={selectedTargetId}
+                            onChange={(e) => {
+                              setCustomTargets((prev) => ({
+                                ...prev,
+                                [fault.id]: e.target.value,
+                              }));
+                              setTargetPickerOpen(null);
+                            }}
+                            className="w-full bg-background border border-border text-[10px] text-text-primary rounded p-1 font-mono focus:outline-none focus:border-accent"
+                          >
+                            {currentSpec.services.map((svc) => (
+                              <option key={svc.id} value={svc.id}>
+                                {svc.name || svc.id} ({svc.role || 'service'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -240,17 +313,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               <div className="flex items-center justify-between text-xs font-semibold text-text-primary">
                 <span className="flex items-center gap-1.5">
                   <TrendingUp className="w-3.5 h-3.5 text-accent" />
-                  <span>Workload Profile</span>
+                  <span>Workload Profiles</span>
                 </span>
-                <span className="text-[10px] text-text-dim">Gateway entry</span>
+                <span className="text-[10px] text-text-dim font-mono">
+                  {currentSpec.workload.base_rps || 600} RPS
+                </span>
               </div>
               <div className="space-y-1">
-                {[
-                  { id: 'constant', title: 'Constant Baseline', desc: '600 RPS steady load' },
-                  { id: 'flash_sale', title: 'Flash Sale Peak', desc: 'Surge from 600 to 1800 RPS (3x)' },
-                  { id: 'ramp', title: 'Gradual Ramp Up', desc: 'Linear climb 0 to 2000 RPS' },
-                  { id: 'diurnal', title: 'Diurnal Wave', desc: 'Day / night traffic curve' },
-                ].map((wl) => {
+                {getArchitectureWorkloadProfiles(currentSpec).map((wl) => {
                   const isActive = currentSpec.workload.pattern === wl.id;
                   return (
                     <button
@@ -280,6 +350,48 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Dynamic Base RPS Stepper & Range Slider */}
+              <div className="pt-2.5 mt-2 border-t border-border/70 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-text-muted">Base Ingress Traffic</span>
+                  <span className="text-accent font-bold px-1.5 py-0.5 rounded bg-accent/10 border border-accent/30 tabular-nums">
+                    {currentSpec.workload.base_rps || 600} RPS
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      const cur = currentSpec.workload.base_rps || 600;
+                      onUpdateBaseRps?.(Math.max(50, cur - 100));
+                    }}
+                    className="px-2 py-0.5 text-xs rounded bg-surface-raised border border-border text-text-muted hover:text-text-primary hover:border-accent active:scale-95"
+                    title="Decrease Base RPS by 100"
+                  >
+                    -100
+                  </button>
+                  <input
+                    type="range"
+                    min={50}
+                    max={5000}
+                    step={50}
+                    value={currentSpec.workload.base_rps || 600}
+                    onChange={(e) => onUpdateBaseRps?.(Number(e.target.value))}
+                    className="flex-1 accent-accent h-1.5 bg-surface-raised rounded cursor-pointer"
+                    title="Slide to dynamically tune nominal load"
+                  />
+                  <button
+                    onClick={() => {
+                      const cur = currentSpec.workload.base_rps || 600;
+                      onUpdateBaseRps?.(Math.min(10000, cur + 100));
+                    }}
+                    className="px-2 py-0.5 text-xs rounded bg-surface-raised border border-border text-text-muted hover:text-text-primary hover:border-accent active:scale-95"
+                    title="Increase Base RPS by 100"
+                  >
+                    +100
+                  </button>
+                </div>
               </div>
             </div>
 
