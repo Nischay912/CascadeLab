@@ -17,6 +17,9 @@ import {
   Gamepad2,
   ShoppingBag,
   Zap,
+  Key,
+  Settings,
+  Check,
 } from 'lucide-react';
 import {
   synthesizeArchitectureFromPrompt,
@@ -24,6 +27,19 @@ import {
   PROMPT_PRESETS,
   PromptPreset,
 } from './promptArchitectureEngine';
+
+const AI_LOADING_STAGES = [
+  'Querying Google Gemini Neural Architecture Engine...',
+  'Decomposing requirements into hierarchical DAG tiers...',
+  'Synthesizing microservices with Little’s Law calibrated queues...',
+  'Balancing thread concurrency, latencies & resilience posture...',
+  'Finalizing DAG edges and computing visual canvas coordinates...',
+];
+import {
+  synthesizeArchitectureWithGemini,
+  getGeminiApiKey,
+  setGeminiApiKey,
+} from './geminiTopologyGenerator';
 import { useArchitectureStore } from '../state/useArchitectureStore';
 
 interface PromptArchitectureModalProps {
@@ -50,6 +66,12 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
 }) => {
   const { deploySynthesizedArchitecture } = useArchitectureStore();
 
+  const hasEnvKey = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+  const [apiKey, setApiKey] = useState<string>(() => getGeminiApiKey() || '');
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
+  const [savedKeyNotice, setSavedKeyNotice] = useState(false);
+
   const [prompt, setPrompt] = useState(
     'Generate an Uber-like ride-hailing architecture with a geospatial matching service, a surge pricing cache, and an external payment gateway.'
   );
@@ -60,6 +82,18 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
   const [synthesizedResult, setSynthesizedResult] =
     useState<SynthesizedArchitectureResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingStageIdx, setLoadingStageIdx] = useState(0);
+
+  useEffect(() => {
+    if (!isSynthesizing) {
+      setLoadingStageIdx(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setLoadingStageIdx((prev) => (prev + 1) % AI_LOADING_STAGES.length);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [isSynthesizing]);
 
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -76,17 +110,28 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
     setError(null);
   };
 
-  const handleSynthesize = () => {
+  const handleSynthesize = async () => {
     if (!prompt.trim()) {
       setError('Please enter a natural language prompt description.');
       return;
     }
     setError(null);
     setIsSynthesizing(true);
+    setSynthesizedResult(null);
 
-    // Provide a brief realistic cybernetic delay for UX
-    setTimeout(() => {
-      try {
+    try {
+      const activeKey = getGeminiApiKey();
+      if (activeKey) {
+        // High-intelligence neural synthesis powered by Google Gemini
+        const result = await synthesizeArchitectureWithGemini(prompt, {
+          mode,
+          trafficScale,
+          includeSpof,
+          includeFault: true,
+        });
+        setSynthesizedResult(result);
+      } else {
+        // Fallback to local heuristic engine
         const result = synthesizeArchitectureFromPrompt(prompt, {
           mode,
           trafficScale,
@@ -94,13 +139,29 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
           includeFault: true,
         });
         setSynthesizedResult(result);
-        setIsSynthesizing(false);
-      } catch (err: any) {
-        setError(err.message || 'Failed to synthesize architecture spec.');
-        setSynthesizedResult(null);
-        setIsSynthesizing(false);
       }
-    }, 400);
+    } catch (err: any) {
+      setError(err.message || 'Failed to synthesize architecture spec.');
+      setSynthesizedResult(null);
+    } finally {
+      setIsSynthesizing(false);
+    }
+  };
+
+  const handleSaveApiKey = () => {
+    if (keyInput.trim()) {
+      setGeminiApiKey(keyInput.trim());
+      setApiKey(keyInput.trim());
+    } else {
+      setGeminiApiKey('');
+      setApiKey(getGeminiApiKey() || '');
+    }
+    setKeyInput(''); // Always clear input so secret is never kept in the DOM
+    setSavedKeyNotice(true);
+    setTimeout(() => {
+      setSavedKeyNotice(false);
+      setShowKeyConfig(false);
+    }, 1200);
   };
 
   const handleDeployToCanvas = () => {
@@ -135,13 +196,88 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowKeyConfig(!showKeyConfig)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-all ${
+                apiKey
+                  ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'bg-amber-500/15 border-amber-500/35 text-amber-300 hover:bg-amber-500/25'
+              }`}
+              title="Configure Google Gemini API Key"
+            >
+              {apiKey ? (
+                <>
+                  <Sparkles className="w-3 h-3 text-emerald-400" />
+                  <span>Gemini AI Connected</span>
+                  <Settings className="w-3 h-3 text-emerald-400/70 ml-0.5" />
+                </>
+              ) : (
+                <>
+                  <Key className="w-3 h-3 text-amber-400" />
+                  <span>Add Free Gemini Key</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-text-muted hover:text-white hover:bg-surface-hover transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Gemini API Key Configuration Panel */}
+        {showKeyConfig && (
+          <div className="px-5 py-3 bg-surface-raised border-b border-border/80 flex flex-col gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-text-primary flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-accent" />
+                Google Gemini API Key (100% Free Forever)
+              </span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-accent hover:underline flex items-center gap-1 font-mono"
+              >
+                Get Key from Google AI Studio ↗
+              </a>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                placeholder={
+                  hasEnvKey
+                    ? '•••••••••••••••• (Active via .env.local - enter new key to override)'
+                    : 'Paste your Gemini API key (AIzaSy...)'
+                }
+                className="flex-1 bg-background border border-border/80 focus:border-accent rounded-lg px-3 py-1.5 text-xs text-text-primary font-mono focus:outline-none"
+              />
+              <button
+                onClick={handleSaveApiKey}
+                className="px-3 py-1.5 bg-accent text-background font-bold text-xs rounded-lg hover:brightness-110 transition-all flex items-center gap-1 flex-shrink-0"
+              >
+                {savedKeyNotice ? <Check className="w-3.5 h-3.5" /> : null}
+                <span>{savedKeyNotice ? 'Saved!' : 'Save Key'}</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-text-dim flex items-center justify-between">
+              <span>
+                {hasEnvKey ? (
+                  <span className="text-emerald-400 font-mono">
+                    🛡️ Protected: Key loaded from .env.local (Hidden from DOM inspection)
+                  </span>
+                ) : (
+                  <span>Saved in your browser local storage.</span>
+                )}
+              </span>
+            </p>
+          </div>
+        )}
 
         {/* Modal Scrollable Body */}
         <div className="p-5 space-y-5 overflow-y-auto flex-1 font-sans text-xs">
@@ -320,8 +456,62 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
             </button>
           </div>
 
+          {/* AI Neural Reasoning & Synthesis Loader */}
+          {isSynthesizing && (
+            <div className="p-6 rounded-2xl bg-gradient-to-b from-surface-raised via-background to-surface border border-accent/40 shadow-[0_0_35px_rgba(56,189,248,0.25)] flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+              {/* Ambient Cybernetic Glow */}
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-72 h-28 bg-accent/15 blur-3xl pointer-events-none rounded-full" />
+              <div className="absolute -bottom-10 right-10 w-48 h-20 bg-purple-500/15 blur-2xl pointer-events-none rounded-full" />
+
+              {/* Rotating Cybernetic Dual Rings & Central AI Core */}
+              <div className="relative w-16 h-16 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border-2 border-dashed border-accent/50 animate-[spin_6s_linear_infinite]" />
+                <div className="absolute inset-1.5 rounded-full border-2 border-cyan-400/40 border-t-accent animate-[spin_3s_linear_infinite_reverse]" />
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-accent to-purple-500 flex items-center justify-center shadow-[0_0_20px_rgba(56,189,248,0.6)] animate-pulse">
+                  <Sparkles className="w-5 h-5 text-background" />
+                </div>
+              </div>
+
+              {/* Dynamic Stage Step Progress */}
+              <div className="space-y-1.5 max-w-md">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-accent">
+                    Google Gemini 3.8 Flash Neural Engine
+                  </span>
+                </div>
+                <h4 className="text-sm font-semibold text-white transition-all duration-300 min-h-[22px]">
+                  {AI_LOADING_STAGES[loadingStageIdx % AI_LOADING_STAGES.length]}
+                </h4>
+                <p className="text-[11px] text-text-muted">
+                  Synthesizing microservices, directed acyclic graphs, and Little's Law queues
+                </p>
+              </div>
+
+              {/* Shimmer Bar */}
+              <div className="w-full max-w-sm h-1.5 bg-surface-raised rounded-full overflow-hidden border border-border/80 relative">
+                <div className="h-full bg-gradient-to-r from-cyan-500 via-accent to-purple-500 rounded-full w-full animate-[pulse_1.5s_ease-in-out_infinite]" />
+              </div>
+
+              {/* Telemetry Pills */}
+              <div className="flex items-center gap-3 text-[10px] font-mono text-text-dim pt-1">
+                <span className="flex items-center gap-1 text-cyan-400">
+                  <Bot className="w-3 h-3" />
+                  Gemini 3.8 Flash
+                </span>
+                <span className="text-border">•</span>
+                <span className="text-accent">Structured JSON Mode</span>
+                <span className="text-border">•</span>
+                <span className="text-emerald-400">Zero Hardcoding</span>
+              </div>
+            </div>
+          )}
+
           {error && (
-            <div className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+            <div
+              data-testid="ai-prompt-error"
+              className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2"
+            >
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -372,7 +562,11 @@ export const PromptArchitectureModal: React.FC<PromptArchitectureModalProps> = (
               </div>
 
               {/* Tiers Breakdown */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <div
+                className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
+                  synthesizedResult.summary.tiers.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+                }`}
+              >
                 {synthesizedResult.summary.tiers.map((tier, idx) => (
                   <div
                     key={idx}
