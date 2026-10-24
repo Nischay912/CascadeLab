@@ -13,6 +13,7 @@ import {
   resolveSmartFault,
   getSmartTargetDisplayName,
   FAULT_DEFINITIONS,
+  getArchitectureWorkloadProfiles,
 } from './sim/faultHelper';
 import { ArchitectureSpec } from './schema/architecture';
 import {
@@ -213,21 +214,71 @@ export const App: React.FC = () => {
 
   /**
    * Switches offered workload pattern (Constant, Flash Sale, Ramp, Diurnal)
+   * Immediately animates and reflects traffic on the topology canvas.
    */
   const handleSetWorkload = useCallback(
     (workloadPattern: string) => {
       skipReinitRef.current = true;
       const updatedSpec = setWorkloadPattern(workloadPattern);
+
+      // Wrap back to 0 if at the end of the timeline
+      if (currentTime >= 165) {
+        setCurrentTime(0);
+      }
+
+      // Re-run simulation batch immediately with updated workload
       runSimulationBatch(updatedSpec, 180, seed, true);
+
+      // Auto-start playback so dynamic traffic curves visibly animate live on canvas
+      if (!isRunning) {
+        toggleRunning();
+      }
+
+      // Set playback speed to at least 2x for ramp / diurnal so user sees the curve unfold
+      if (workloadPattern === 'ramp' || workloadPattern === 'diurnal') {
+        if (speed < 2) setSpeed(2);
+      }
+
+      const profiles = getArchitectureWorkloadProfiles(currentSpec);
+      const matchedProfile = profiles.find((p) => p.id === workloadPattern);
+      const profileTitle = matchedProfile?.title || workloadPattern.replace('_', ' ').toUpperCase();
       const targetRps = Math.round(
         updatedSpec.workload.base_rps * (updatedSpec.workload.multiplier || 1.0)
       );
-      showToast(
-        `📈 Workload profile switched to "${workloadPattern.replace('_', ' ').toUpperCase()}" (${targetRps} RPS)`,
-        'workload'
-      );
+
+      if (workloadPattern === 'constant') {
+        showToast(`⚖️ Baseline Restored: "${profileTitle}" (steady at ${targetRps} RPS)`, 'workload');
+      } else if (workloadPattern === 'flash_sale' || workloadPattern === 'spike') {
+        showToast(`🔥 Peak Surge Active: "${profileTitle}" (surging to ${targetRps} RPS)`, 'workload');
+      } else if (workloadPattern === 'ramp') {
+        showToast(
+          `📈 Influx Ramp Active: "${profileTitle}" (climbing ${updatedSpec.workload.base_rps} to ${targetRps} RPS)`,
+          'workload'
+        );
+      } else if (workloadPattern === 'diurnal') {
+        const valleyRps = Math.round(updatedSpec.workload.base_rps * 0.5);
+        const peakRps = Math.round(updatedSpec.workload.base_rps * 1.5);
+        showToast(
+          `🌊 Diurnal Wave Active: "${profileTitle}" (oscillating ${valleyRps} - ${peakRps} RPS)`,
+          'workload'
+        );
+      } else {
+        showToast(`📈 Workload profile switched to "${profileTitle}" (${targetRps} RPS)`, 'workload');
+      }
     },
-    [setWorkloadPattern, seed, runSimulationBatch, showToast]
+    [
+      currentSpec,
+      currentTime,
+      isRunning,
+      speed,
+      seed,
+      setWorkloadPattern,
+      runSimulationBatch,
+      setCurrentTime,
+      toggleRunning,
+      setSpeed,
+      showToast,
+    ]
   );
 
   /**

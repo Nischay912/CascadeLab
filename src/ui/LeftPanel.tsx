@@ -326,11 +326,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               </div>
               <div className="space-y-1">
                 {getArchitectureWorkloadProfiles(currentSpec).map((wl) => {
-                  const isActive = currentSpec.workload.pattern === wl.id;
+                  const isActive =
+                    currentSpec.workload.pattern === wl.id ||
+                    (wl.id === 'flash_sale' && currentSpec.workload.pattern === 'spike');
                   return (
                     <button
                       key={wl.id}
                       onClick={() => onSetWorkload(wl.id)}
+                      title={`Click to activate ${wl.title} (${wl.desc})`}
                       className={`w-full p-2 rounded border text-left transition-all flex items-center justify-between group ${
                         isActive
                           ? 'bg-accent/20 border-accent text-accent shadow-sm ring-1 ring-accent/30'
@@ -344,7 +347,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                         <div className="text-[10px] text-text-dim">{wl.desc}</div>
                       </div>
                       {isActive ? (
-                        <span className="text-[10px] font-bold text-accent px-1.5 py-0.5 rounded bg-accent/20 border border-accent/40">
+                        <span className="text-[10px] font-bold text-accent px-1.5 py-0.5 rounded bg-accent/20 border border-accent/40 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                           Active
                         </span>
                       ) : (

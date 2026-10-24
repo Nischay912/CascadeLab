@@ -464,13 +464,13 @@ export const useArchitectureStore = create<ArchitectureState>((set, get) => ({
     const multiplier =
       pattern === 'constant'
         ? 1.0
-        : pattern === 'flash_sale'
+        : pattern === 'flash_sale' || pattern === 'spike'
         ? 3.0
         : pattern === 'ramp'
         ? 3.33
         : pattern === 'diurnal'
         ? 1.5
-        : currentSpec.workload.multiplier;
+        : currentSpec.workload?.multiplier || 1.0;
 
     const updatedSpec: ArchitectureSpec = {
       ...currentSpec,

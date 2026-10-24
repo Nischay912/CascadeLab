@@ -357,8 +357,14 @@ export class SimulationEngine {
 
     // 4. Compute Inflow Arrival Rates (Lambda) via Topological Traversal
     const serviceArrivals = new Map<string, number>();
-    for (const svc of this.spec.services) {
-      const isEntry = Boolean(svc.entry || svc.id === this.spec.workload.entry);
+    const hasExplicitEntry = this.spec.services.some(
+      (svc) => svc.entry || svc.id === this.spec.workload?.entry
+    );
+    for (let i = 0; i < this.spec.services.length; i++) {
+      const svc = this.spec.services[i];
+      const isEntry = hasExplicitEntry
+        ? Boolean(svc.entry || svc.id === this.spec.workload?.entry)
+        : i === 0;
       serviceArrivals.set(svc.id, isEntry ? offeredEntryRps : 0);
     }
 

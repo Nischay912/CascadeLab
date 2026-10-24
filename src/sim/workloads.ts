@@ -4,50 +4,46 @@ import { WorkloadSpec } from '../schema/architecture';
  * Computes the offered external arrival rate (RPS) at a specific simulation second t.
  */
 export function getOfferedWorkloadRps(workload: WorkloadSpec, t: number): number {
-  const { pattern, base_rps, multiplier, ramp_time_s = 30 } = workload;
-  const peakRps = base_rps * multiplier;
+  const { pattern, base_rps, multiplier = 1.0, ramp_time_s = 90 } = workload;
+  const peakRps = Math.round(base_rps * (multiplier || 1.0));
 
   switch (pattern) {
     case 'constant':
-      return base_rps * multiplier;
+      return Math.round(base_rps * multiplier);
 
     case 'ramp': {
-      if (t <= 0) return base_rps;
-      if (t >= ramp_time_s) return peakRps;
-      const progress = t / ramp_time_s;
-      return base_rps + (peakRps - base_rps) * progress;
+      // Linear climb from base_rps up to peakRps over 90s, with immediate slight lift at t=0
+      const climbDuration = Math.max(45, ramp_time_s);
+      const progress = Math.min(1.0, Math.max(0, t / climbDuration));
+      // Starts at base_rps * 1.15 at t=0 so clicking ramp immediately registers visually
+      const startRps = Math.round(base_rps * 1.15);
+      if (t >= climbDuration) return peakRps;
+      return Math.round(startRps + (peakRps - startRps) * progress);
     }
 
     case 'spike': {
-      // Baseline until t=30, sharp spike between 30 and 70, then exponential decay
-      if (t < 30) return base_rps;
-      if (t <= 70) return peakRps;
-      const decayTime = t - 70;
-      const decay = Math.exp(-decayTime / 20);
-      return base_rps + (peakRps - base_rps) * decay;
+      // Immediate sharp spike from t=0..40s, then exponential decay back to baseline
+      if (t <= 35) return peakRps;
+      const decayTime = t - 35;
+      const decay = Math.exp(-decayTime / 25);
+      return Math.round(base_rps + (peakRps - base_rps) * decay);
     }
 
     case 'diurnal': {
-      // Smooth sine curve oscillating between 0.5 * base and peak
-      const period = 120; // 2 minute cycle in simulation
-      const sine = (Math.sin((t / period) * 2 * Math.PI) + 1) / 2; // [0, 1]
-      return base_rps * (0.6 + 0.8 * sine) * multiplier;
+      // 60-second full day/night cycle (oscillates between 0.5x night valley and 1.5x day peak)
+      const period = 60;
+      const sine = Math.sin((t / period) * 2 * Math.PI); // [-1, 1]
+      // At t=0, sine is 0, so factor is 1.0 (baseline). Peak at t=15s (1.5x), valley at t=45s (0.5x)
+      const factor = 1.0 + 0.5 * sine;
+      return Math.round(base_rps * factor);
     }
 
     case 'flash_sale': {
-      // 0..30s: baseline (e.g. 600 RPS)
-      // 30..45s: rapid pre-surge buildup
-      // 45..120s: sustained flash sale peak (e.g. 1800 RPS)
-      // 120..150s: cool-down back to baseline
-      if (t < 30) return base_rps;
-      if (t < 45) {
-        const ramp = (t - 30) / 15;
-        return base_rps + (peakRps - base_rps) * ramp;
-      }
-      if (t <= 165) return peakRps;
-      if (t < 180) {
-        const cooldown = (180 - t) / 15;
-        return base_rps + (peakRps - base_rps) * cooldown;
+      // Immediate 3.0x peak surge from t=0..90s, then gradual cool-down to baseline
+      if (t <= 90) return peakRps;
+      if (t <= 130) {
+        const cooldown = (130 - t) / 40;
+        return Math.round(base_rps + (peakRps - base_rps) * cooldown);
       }
       return base_rps;
     }
