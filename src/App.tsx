@@ -8,12 +8,12 @@ import { useArchitectureStore } from './state/useArchitectureStore';
 import { useSimulationStore, ScenarioType } from './state/useSimulationStore';
 import { runLinter, applyLintFix, LintFinding } from './lint';
 import { analyzeSimulationIncident } from './analysis';
-import { evaluateFastResilienceScore } from './optimizer/fastSuite';
 import {
   resolveSmartFault,
   getSmartTargetDisplayName,
   FAULT_DEFINITIONS,
   getArchitectureWorkloadProfiles,
+  calculateLiveResilienceScore,
 } from './sim/faultHelper';
 import { ArchitectureSpec } from './schema/architecture';
 import {
@@ -480,10 +480,10 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleRunning, resetSimulation, setSpeed, loadTemplate]);
 
-  // Headline Chaos Suite Resilience Score for the top bar
-  const chaosResilienceScore = useMemo(() => {
-    return evaluateFastResilienceScore(currentSpec);
-  }, [currentSpec]);
+  // Dynamic Real-Time Resilience Score for the top bar
+  const liveResilienceScore = useMemo(() => {
+    return calculateLiveResilienceScore(currentSpec, currentMetrics);
+  }, [currentSpec, currentMetrics]);
 
   // Dynamic Root Cause & Pattern Analysis Engine
   const rootCause = useMemo(() => {
@@ -794,7 +794,7 @@ export const App: React.FC = () => {
         onDeleteCustomArchitecture={() => setIsDeleteModalOpen(true)}
         selectedScenario={selectedScenario}
         onSelectScenario={handleScenarioChange}
-        resilienceScore={chaosResilienceScore}
+        resilienceScore={liveResilienceScore}
         onAutoHarden={handleAutoHarden}
         onOpenCommander={() => setIsCommanderOpen(true)}
         commanderThreatLevel={commanderThreatLevel}
@@ -1090,7 +1090,7 @@ export const App: React.FC = () => {
         currentSpec={currentSpec}
         onApplyMitigation={handleApplyCommanderMitigation}
         onTriggerChaosScenario={(sc) => handleScenarioChange(sc)}
-        resilienceScore={chaosResilienceScore}
+        resilienceScore={liveResilienceScore}
       />
     </div>
   );

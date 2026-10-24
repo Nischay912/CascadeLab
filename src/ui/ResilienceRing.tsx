@@ -59,7 +59,13 @@ export const ResilienceRing: React.FC<ResilienceRingProps> = ({
     <div
       data-testid="resilience-ring"
       className="flex items-center gap-2 group cursor-pointer flex-shrink-0"
-      title={`Headline Score: Chaos Suite Resilience = ${clampedScore}/100\nComputed across the full chaos failure matrix (node outages, latency spikes, retry storms, AZ loss).`}
+      title={`System Resilience Score: ${clampedScore}/100\n${
+        clampedScore >= 80
+          ? 'Healthy (100% SLO compliance, nominal latencies, fleet intact)'
+          : clampedScore >= 50
+          ? 'Degraded (elevated latency or partial queue build-up)'
+          : 'Critical (active overload / cascading failure / replica crashes)'
+      }`}
     >
       <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
         <svg className="transform -rotate-90" width={size} height={size}>
@@ -96,15 +102,15 @@ export const ResilienceRing: React.FC<ResilienceRingProps> = ({
         </div>
       </div>
       {showLabel && (
-        <div className="hidden min-[1680px]:flex flex-col text-left whitespace-nowrap">
+        <div className="hidden lg:flex flex-col text-left whitespace-nowrap">
           <span className="text-[10px] uppercase tracking-wider text-text-muted font-bold font-mono leading-tight">
-            Chaos Suite
+            Resilience
           </span>
           <span
             className="text-xs font-bold capitalize transition-colors duration-300 leading-tight"
             style={{ color: ringColor }}
           >
-            Resilience
+            {clampedScore >= 80 ? 'Healthy' : clampedScore >= 50 ? 'Degraded' : 'Critical'}
           </span>
         </div>
       )}

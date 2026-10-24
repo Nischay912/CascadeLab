@@ -1,4 +1,5 @@
 import { ArchitectureSpec, FaultSpec } from '../schema/architecture';
+import { SimulationTickMetrics } from './engine';
 
 export interface SmartFaultDefinition {
   id: string;
@@ -586,4 +587,48 @@ export function getSmartTargetDisplayName(fault: FaultSpec, spec: ArchitectureSp
   }
   const svc = spec.services.find((s) => s.id === fault.target);
   return svc?.name || fault.target;
+}
+
+/**
+ * Computes the real-time operational resilience score (0..100) dynamically
+ * for ANY architecture topology (templates, custom imports, or AI-generated).
+ *
+ * Factors in:
+ * 1. User Success Rate vs SLO (50% weight)
+ * 2. Latency SLA Compliance vs SLO (25% weight)
+ * 3. Fleet Replicas Availability / Health (25% weight)
+ */
+export function calculateLiveResilienceScore(
+  spec: ArchitectureSpec,
+  metrics: SimulationTickMetrics | null
+): number {
+  if (!metrics) return 100;
+
+  const successRate = metrics.userSuccessRate ?? 100;
+  const p95LatencyMs = metrics.userP95Ms ?? (spec.slo?.p95_ms || 300);
+  const sloP95 = spec.slo?.p95_ms || 400;
+  const sloSuccess = spec.slo?.success_pct || 99;
+
+  // 1. Success Component (50%)
+  const successScore = Math.max(0, Math.min(100, (successRate / sloSuccess) * 100));
+
+  // 2. Latency SLA Compliance (25%)
+  const latencyScore =
+    p95LatencyMs <= sloP95
+      ? 100
+      : Math.max(0, Math.min(100, (sloP95 / p95LatencyMs) * 100));
+
+  // 3. Fleet Instance Health (25%)
+  const totalCrashed = metrics.crashedInstances ?? 0;
+  const totalActive = metrics.activeInstances ?? 1;
+  const totalFleet = totalActive + totalCrashed;
+  const fleetScore = totalFleet > 0 ? Math.max(0, Math.min(100, (totalActive / totalFleet) * 100)) : 100;
+
+  const composite = Math.round(
+    0.50 * successScore +
+    0.25 * latencyScore +
+    0.25 * fleetScore
+  );
+
+  return Math.max(0, Math.min(100, composite));
 }
