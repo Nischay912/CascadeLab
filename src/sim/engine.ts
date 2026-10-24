@@ -636,9 +636,12 @@ export class SimulationEngine {
     }
     const amplification = offeredEntryRps > 0 ? totalInternalRps / offeredEntryRps : 1.0;
 
-    // Monetary Loss
-    const failedRequests = Math.max(0, offeredEntryRps * (1.0 - userSuccessRate / 100));
-    const moneyLostThisSec = failedRequests * (this.spec.value_per_request_inr || 40);
+    // Monetary Loss: calculate financial impact only from real dropped/failed transactions
+    const failedRequests =
+      userSuccessRate >= 99.99
+        ? 0
+        : Math.max(0, offeredEntryRps * (1.0 - userSuccessRate / 100));
+    const moneyLostThisSec = failedRequests * (this.spec.value_per_request_inr ?? 40);
     this.cumulativeMoneyLostInr += moneyLostThisSec;
 
     // Metastable Failure Detection (D1: computed, not hard-coded):

@@ -813,12 +813,14 @@ export const App: React.FC = () => {
         userSuccessRate={currentMetrics?.userSuccessRate}
         userP95Ms={currentMetrics?.userP95Ms}
         cumulativeMoneyLostInr={currentMetrics?.cumulativeMoneyLostInr}
-        valuePerRequestInr={currentSpec.value_per_request_inr || 500}
+        valuePerRequestInr={currentSpec.value_per_request_inr ?? 40}
         onUpdateValuePerRequest={(val) => {
-          setSpec({
+          const updated = {
             ...currentSpec,
             value_per_request_inr: val,
-          });
+          };
+          setSpec(updated);
+          runSimulationBatch(updated, 180, seed, true);
         }}
         onInjectFault={handleInjectOrToggleFault}
       />
