@@ -62,12 +62,8 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
   const retryAmplificationNum = expectedNominalInternalRps > 0 ? internalRps / expectedNominalInternalRps : 1.0;
   const retryAmplification = retryAmplificationNum.toFixed(1);
 
-  // Compute default event markers from history if not supplied
-  const effectiveMarkers: EventMarker[] = markers || [
-    { time: 60, label: 'Fault Injection Start', type: 'fault' },
-    { time: 82, label: 'Retry Storm Amplification Peak', type: 'crash' },
-    { time: 120, label: 'Fault Cleared / Recovery', type: 'recovery' },
-  ];
+  // Dynamic event markers (fault strike, recovery, workload surge onset)
+  const effectiveMarkers: EventMarker[] = markers !== undefined ? markers : [];
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -225,6 +221,7 @@ export const BottomTimeline: React.FC<BottomTimelineProps> = ({
           {/* Invisible interactive input range */}
           <input
             type="range"
+            data-testid="timeline-scrubber"
             min={0}
             max={maxTime}
             value={currentTime}

@@ -172,9 +172,21 @@ export function resolveSmartFault(
   currentTime: number = 0,
   targetOverride?: string
 ): FaultSpec {
-  const start_s = currentTime === 0 ? 0 : Math.round(currentTime);
-  const duration = FAULT_DEFINITIONS[faultType]?.defaultDurationSeconds || 90;
-  const end_s = currentTime === 0 ? duration : Math.min(180, Math.round(currentTime) + 60);
+  // SRE Chaos Experiment Window:
+  // If injecting during pre-incident baseline (currentTime < 25s), schedule fault cleanly
+  // from 30s (Red Dot on Seekbar) to 95s, ensuring the incident remains actively broken
+  // throughout the entire red-to-green window (including 00:43, 01:19, and 01:36),
+  // and completely heals at exactly 110s (Green Dot on Seekbar).
+  // If injecting dynamically mid-playback (currentTime >= 25s), fire immediately for 55 seconds.
+  let start_s = 30;
+  let end_s = 95;
+  if (currentTime >= 25 && currentTime < 140) {
+    start_s = Math.round(currentTime);
+    end_s = Math.min(160, Math.round(currentTime) + 55);
+  } else if (currentTime >= 140) {
+    start_s = 30;
+    end_s = 95;
+  }
 
   const resolved = resolveTargetServiceForFault(faultType, spec);
   const targetId = targetOverride || resolved.id;

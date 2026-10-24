@@ -139,7 +139,10 @@ const GraphCanvasInner: React.FC<{
         const svcSpec = (node.data as any)?.service;
         const initialReplicas = svcSpec?.instances?.initial ?? 4;
         const ownServiceTime = svcSpec?.service_time_ms ?? 10;
-        const baselineLatency = history[0]?.services[node.id]?.p95Ms ?? ownServiceTime;
+        const baselineLatency =
+          history[5]?.services[node.id]?.p95Ms ??
+          history[0]?.services[node.id]?.p95Ms ??
+          ownServiceTime;
 
         const activeInstances = svcMetrics?.instancesReady ?? initialReplicas;
         const crashedInstances = svcMetrics?.instancesCrashed ?? 0;
@@ -163,10 +166,10 @@ const GraphCanvasInner: React.FC<{
           queue > 15 ||
           successRate < 95 ||
           isTargetOfActiveFault ||
-          (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 35))
+          (baselineLatency > 0 && latencyMs > Math.max(baselineLatency * 2.2, ownServiceTime + 45))
         ) {
           status = 'degraded';
-        } else if (svcMetrics?.cooldownTimer && svcMetrics.cooldownTimer > 0) {
+        } else if (svcMetrics?.cooldownTimer && svcMetrics.cooldownTimer > 0 && queue > 0) {
           status = 'recovering';
         }
 

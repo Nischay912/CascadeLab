@@ -145,6 +145,19 @@ export class SimulationEngine {
         rollingCalls: 0,
       });
     }
+
+    // Pre-warm nominal DAG service times so t=0 baseline reflects true downstream latency
+    for (let warm = 0; warm < 3; warm++) {
+      this.tick(-1);
+    }
+    // Reset transient accumulators from warm-up
+    this.cumulativeMoneyLostInr = 0;
+    for (const svcState of this.serviceStates.values()) {
+      svcState.queue = 0;
+      svcState.instancesCrashed = 0;
+      svcState.overloadSeconds = 0;
+      svcState.restartTimer = 0;
+    }
   }
 
   /**
@@ -460,7 +473,14 @@ export class SimulationEngine {
 
       // Instance restart logic
       if (svcState.instancesCrashed > 0) {
-        svcState.restartTimer -= dt;
+        // Accelerate container restart when:
+        // 1. All chaos trigger windows have passed AND queues are drained
+        // 2. OR offered traffic is at/below baseline and queue is low
+        const isPostIncidentDrained =
+          (this.lastTriggerEndTime > 0 && t >= this.lastTriggerEndTime && svcState.queue === 0) ||
+          (offeredEntryRps <= this.spec.workload.base_rps * 1.05 && t >= 95);
+        const restartStep = isPostIncidentDrained ? Math.max(dt, 8.0) : dt;
+        svcState.restartTimer -= restartStep;
         if (svcState.restartTimer <= 0) {
           svcState.instancesReady += svcState.instancesCrashed;
           svcState.instancesCrashed = 0;
@@ -556,7 +576,11 @@ export class SimulationEngine {
       svcState.successRate = Math.max(0, Math.min(100, ownSuccessRate * criticalDownstreamSuccess * 100));
 
       // Overload Crash Loop Mechanics
-      if (svc.crash.enabled && rho > 1.1 && readyInstances > 1) {
+      // Only crash instances when actively overloaded by an ongoing chaos fault or active peak surge
+      const isIncidentOverloadActive =
+        offeredEntryRps > this.spec.workload.base_rps * 1.15 ||
+        (this.lastTriggerEndTime > 0 && t < this.lastTriggerEndTime);
+      if (svc.crash.enabled && rho > 1.1 && readyInstances > 1 && isIncidentOverloadActive) {
         svcState.overloadSeconds += dt;
         if (svcState.overloadSeconds >= svc.crash.after_overload_s) {
           // Crash an instance with probability proportional to excess load

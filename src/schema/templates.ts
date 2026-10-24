@@ -390,7 +390,7 @@ export const shopFastNaiveTemplate: ArchitectureSpec = {
   ],
   workload: {
     entry: 'gateway',
-    pattern: 'flash_sale',
+    pattern: 'constant',
     base_rps: 600,
     multiplier: 1.0,
     duration_s: 180,

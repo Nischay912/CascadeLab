@@ -165,6 +165,9 @@ export const App: React.FC = () => {
         }
       } else {
         // Toggle ON: Inject new smart fault tailored to current topology (or custom target)
+        if (currentTime >= 135) {
+          setCurrentTime(0);
+        }
         const smartFault = resolveSmartFault(faultType, currentSpec, currentTime, targetOverride);
         const cleaned = currentSpec.faults.filter((f) => f.type !== faultType);
         updatedSpec = {
@@ -178,12 +181,32 @@ export const App: React.FC = () => {
           `🔥 Injected: ${label} on [${targetName}] (t=${smartFault.start_s}s..${smartFault.end_s}s)`,
           'fault'
         );
+
+        if (!isRunning) {
+          toggleRunning();
+        }
+        if (speed < 2) {
+          setSpeed(2);
+        }
       }
 
       // Re-run simulation batch immediately with forceCustom=true so preset scenario doesn't wipe it
       runSimulationBatch(updatedSpec, 180, seed, true);
     },
-    [currentSpec, currentTime, seed, removeFaultByType, setSpec, runSimulationBatch, showToast]
+    [
+      currentSpec,
+      currentTime,
+      seed,
+      isRunning,
+      speed,
+      toggleRunning,
+      setSpeed,
+      setCurrentTime,
+      removeFaultByType,
+      setSpec,
+      runSimulationBatch,
+      showToast,
+    ]
   );
 
   /**
@@ -221,8 +244,8 @@ export const App: React.FC = () => {
       skipReinitRef.current = true;
       const updatedSpec = setWorkloadPattern(workloadPattern);
 
-      // Wrap back to 0 if at the end of the timeline
-      if (currentTime >= 165) {
+      // Wrap back to 0 if at or past the surge window
+      if (currentTime >= 135) {
         setCurrentTime(0);
       }
 
@@ -312,30 +335,73 @@ export const App: React.FC = () => {
   }, [clearAllFaults, seed, runSimulationBatch, showToast]);
 
   /**
-   * Dynamic event markers for bottom timeline scrubber
+   * Dynamic event markers for bottom timeline scrubber.
+   * Realistically aligns Red Dot (Chaos/Surge Strike) and Green Dot (Recovery/Cooldown).
+   * Displays zero fake markers when running in Constant Baseline with no active faults.
    */
   const timelineMarkers: EventMarker[] = useMemo(() => {
-    if (!currentSpec.faults || currentSpec.faults.length === 0) {
-      return [
-        { time: 60, label: 'Chaos Window (Nominal)', type: 'fault' },
-        { time: 120, label: 'Recovery Window (Nominal)', type: 'recovery' },
-      ];
-    }
     const markers: EventMarker[] = [];
-    currentSpec.faults.forEach((fault) => {
-      const targetName = getSmartTargetDisplayName(fault, currentSpec);
-      const label = FAULT_DEFINITIONS[fault.type]?.label || fault.type;
+
+    // 1. Add markers for all active injected faults
+    if (currentSpec.faults && currentSpec.faults.length > 0) {
+      currentSpec.faults.forEach((fault) => {
+        const targetName = getSmartTargetDisplayName(fault, currentSpec);
+        const label = FAULT_DEFINITIONS[fault.type]?.label || fault.type;
+        markers.push({
+          time: fault.start_s,
+          label: `🔥 Strike: ${label} @ [${targetName}]`,
+          type: 'fault',
+        });
+        const healTime = fault.start_s === 30 ? 110 : Math.min(180, fault.end_s + 15);
+        markers.push({
+          time: healTime,
+          label: `🌱 Heal: ${label} cleared & recovered @ [${targetName}]`,
+          type: 'recovery',
+        });
+      });
+    }
+
+    // 2. Add markers for dynamic non-constant workload patterns
+    const pattern = currentSpec.workload.pattern;
+    const profiles = getArchitectureWorkloadProfiles(currentSpec);
+    const matchedProfile = profiles.find((p) => p.id === pattern);
+    const profileTitle = matchedProfile?.title || pattern.toUpperCase();
+
+    if (pattern === 'flash_sale' || pattern === 'spike') {
       markers.push({
-        time: fault.start_s,
-        label: `${label} @ [${targetName}]`,
+        time: 30,
+        label: `⚡ Surge Strike: ${profileTitle}`,
         type: 'fault',
       });
       markers.push({
-        time: fault.end_s,
-        label: `Heal: ${label} ended`,
+        time: 110,
+        label: `🌱 Recovery: ${profileTitle} Cooldown`,
         type: 'recovery',
       });
-    });
+    } else if (pattern === 'ramp') {
+      markers.push({
+        time: 25,
+        label: `📈 Surge Influx: ${profileTitle}`,
+        type: 'fault',
+      });
+      markers.push({
+        time: 110,
+        label: `🛡️ Stabilization: ${profileTitle} Settled`,
+        type: 'recovery',
+      });
+    } else if (pattern === 'diurnal') {
+      markers.push({
+        time: 30,
+        label: `☀️ Peak Hour: ${profileTitle}`,
+        type: 'fault',
+      });
+      markers.push({
+        time: 110,
+        label: `🌙 Off-Peak: ${profileTitle} Relief`,
+        type: 'recovery',
+      });
+    }
+
     return markers.sort((a, b) => a.time - b.time);
   }, [currentSpec]);
 
