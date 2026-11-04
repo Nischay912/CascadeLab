@@ -39,3 +39,6 @@ dist-ssr
 *.sln
 *.sw?
 
+presentation/
+all_components_given_till_now.md
+CascadeLab_PME_AAT_Presentation.pptx

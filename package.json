@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "guard": "tsx scripts/regressionGuard.ts",
     "ci:gate": "tsx scripts/ciResilienceGate.ts",
-    "badge": "tsx scripts/generateBadge.ts"
+    "badge": "tsx scripts/generateBadge.ts",
+    "presentation": "powershell -c Start-Process presentation/index.html",
+    "build:pptx": "node scripts/generate_powerpoint.cjs",
+    "pptx": "powershell -c Start-Process CascadeLab_PME_AAT_Presentation.pptx"
   },
   "dependencies": {
     "@xyflow/react": "^12.4.2",
@@ -20,6 +23,7 @@
     "js-yaml": "^4.1.0",
     "lucide-react": "^1.16.0",
     "lz-string": "^1.5.0",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.0.2",
